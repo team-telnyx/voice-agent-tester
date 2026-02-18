@@ -235,6 +235,10 @@ const argv = yargs(hideBin(process.argv))
     type: 'string',
     description: 'Provider assistant/agent ID to import (required with --provider)'
   })
+  .option('provider-public-key', {
+    type: 'string',
+    description: 'External provider public/browser API key for direct widget testing (required when comparison mode is enabled)'
+  })
   .option('assistant-id', {
     type: 'string',
     description: 'Assistant/agent ID for direct benchmarking (works with all providers)'
@@ -456,8 +460,8 @@ async function main() {
     // Parse URL parameters for template substitution
     const params = parseParams(argv.params);
     
-    // Determine if we should run comparison benchmark
-    const shouldCompare = argv.provider && argv.compare && !argv.noCompare;
+    // Determine if we should run comparison benchmark (may be updated later if public key is missing)
+    let shouldCompare = argv.provider && argv.compare && !argv.noCompare;
     
     // Store credentials for potential comparison run
     let telnyxApiKey = argv.apiKey;
@@ -491,6 +495,23 @@ async function main() {
           throw new Error(`${argv.provider} assistant/agent ID is required for provider import`);
         }
       }
+
+      // Require provider public key when comparison mode is enabled
+      if (shouldCompare && !argv.providerPublicKey) {
+        console.log(`\n🔑 ${argv.provider} public/browser API key is required for comparison mode`);
+        const inputKey = await promptUserInput(`Enter your ${argv.provider} public API key (or press Enter to skip comparison): `);
+        if (inputKey) {
+          argv.providerPublicKey = inputKey;
+        } else {
+          console.warn(`⚠️  No public key provided. Disabling comparison mode (--no-compare).`);
+          console.warn(`   To run comparison benchmarks, pass --provider-public-key <key>\n`);
+          argv.compare = false;
+          argv.noCompare = true;
+        }
+      }
+
+      // Re-evaluate shouldCompare after potential public key prompt
+      shouldCompare = argv.provider && argv.compare && !argv.noCompare;
 
       const importResult = await importAssistantsFromProvider({
         provider: argv.provider,
@@ -583,7 +604,7 @@ async function main() {
 
       // Phase 1: Provider Direct Benchmark
       // Load provider-specific application config with provider assistant ID
-      const providerParams = { ...params, assistantId: providerImportId };
+      const providerParams = { ...params, assistantId: providerImportId, providerApiKey: argv.providerPublicKey };
       const providerAppPath = path.resolve(__packageDir, 'applications', `${argv.provider}.yaml`);
       
       if (!fs.existsSync(providerAppPath)) {
