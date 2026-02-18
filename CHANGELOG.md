@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.1](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.0...v0.4.1) (2026-02-18)
+
+### Features
+
+* require provider-specific params for comparison mode ([#10](https://github.com/team-telnyx/voice-agent-tester/issues/10)) ([db9eb27](https://github.com/team-telnyx/voice-agent-tester/commit/db9eb273c139374a9f6358126113cab92f8f5b32))
+* use Qwen/Qwen3-235B-A22B as model for imported assistants ([#11](https://github.com/team-telnyx/voice-agent-tester/issues/11)) ([3c4ed0a](https://github.com/team-telnyx/voice-agent-tester/commit/3c4ed0a14498833544f1797426b234585adcb49b))
+
+### Bug Fixes
+
+* add --no-git.requireUpstream to release-it in draft workflow ([#14](https://github.com/team-telnyx/voice-agent-tester/issues/14)) ([9553e65](https://github.com/team-telnyx/voice-agent-tester/commit/9553e65bdc6f0094853895da6b806befc5a898f6))
+* use triggering user as git author and create PR for releases ([#13](https://github.com/team-telnyx/voice-agent-tester/issues/13)) ([8ebecba](https://github.com/team-telnyx/voice-agent-tester/commit/8ebecba1839985949e46bec457f327711f89138d))
+
 ## [0.4.0](https://github.com/team-telnyx/voice-agent-tester/compare/v0.3.0...v0.4.0) (2026-01-26)
 
 ### Features
