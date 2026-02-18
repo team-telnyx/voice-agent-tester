@@ -80,7 +80,7 @@ jobs:
 
       - name: Create draft release on branch
         run: |
-          npx release-it --ci --github.draft --no-npm.publish --no-git.push${{ env.INCREMENT_ARG }}${{ env.PRERELEASE_ARGS }}
+          npx release-it --ci --github.draft --no-npm.publish --no-git.push --no-git.requireUpstream${{ env.INCREMENT_ARG }}${{ env.PRERELEASE_ARGS }}
         env:
           NPM_TOKEN: ${{ secrets.NPM_CI_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
