@@ -496,7 +496,8 @@ async function main() {
         provider: argv.provider,
         providerApiKey: providerApiKey,
         telnyxApiKey: telnyxApiKey,
-        assistantId: providerImportId
+        assistantId: providerImportId,
+        debug: argv.debug
       });
 
       // Use the imported assistant's Telnyx ID
@@ -519,7 +520,8 @@ async function main() {
         try {
           const assistant = await getAssistant({
             assistantId: argv.assistantId,
-            telnyxApiKey: argv.apiKey
+            telnyxApiKey: argv.apiKey,
+            debug: argv.debug
           });
 
           const supportsWebCalls = assistant.telephony_settings?.supports_unauthenticated_web_calls;
@@ -535,7 +537,8 @@ async function main() {
               await enableWebCalls({
                 assistantId: argv.assistantId,
                 telnyxApiKey: argv.apiKey,
-                assistant
+                assistant,
+                debug: argv.debug
               });
             } else {
               console.log('   Proceeding without enabling web calls...\n');
