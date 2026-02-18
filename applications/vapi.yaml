@@ -1,4 +1,4 @@
-url: "https://vapi.ai?demo=true&shareKey={{shareKey}}&assistantId={{assistantId}}"
+url: "https://vapi.ai?demo=true&assistantId={{assistantId}}"
 tags:
   - provider
   - vapi
