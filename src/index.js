@@ -98,12 +98,13 @@ function loadApplicationConfig(configPath, params = {}) {
 
   // Substitute URL template params
   const url = substituteUrlParams(config.url, params);
+  const html = substituteUrlParams(config.html, params);
 
   return {
     name: path.basename(configPath, path.extname(configPath)),
     path: configPath,
     url: url,
-    html: config.html,
+    html: html,
     steps: config.steps || [],
     tags: config.tags || []
   };
@@ -583,7 +584,7 @@ async function main() {
 
       // Phase 1: Provider Direct Benchmark
       // Load provider-specific application config with provider assistant ID
-      const providerParams = { ...params, assistantId: providerImportId };
+      const providerParams = { ...params, assistantId: providerImportId, providerApiKey: providerApiKey };
       const providerAppPath = path.resolve(__packageDir, 'applications', `${argv.provider}.yaml`);
       
       if (!fs.existsSync(providerAppPath)) {
