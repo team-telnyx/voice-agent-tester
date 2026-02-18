@@ -36,16 +36,53 @@ const DEFAULT_WIDGET_SETTINGS = {
 };
 
 /**
+ * Log debug information for API requests/responses.
+ * Always logs on error; logs request/response bodies only when debug=true.
+ *
+ * @param {Object} options
+ * @param {string} options.method - HTTP method
+ * @param {string} options.url - Request URL
+ * @param {Object} [options.requestBody] - Request body (logged in debug mode)
+ * @param {number} options.status - Response status code
+ * @param {string} [options.responseBody] - Response body text
+ * @param {boolean} [options.debug] - Whether debug mode is enabled
+ * @param {boolean} [options.isError] - Whether this is an error response
+ */
+function logApiCall({ method, url, requestBody, status, responseBody, debug, isError }) {
+  if (debug) {
+    console.log(`\n🔍 API ${method} ${url}`);
+    if (requestBody) {
+      console.log(`📤 Request body:`, JSON.stringify(requestBody, null, 2));
+    }
+    console.log(`📥 Response [${status}]:`, responseBody || '(empty)');
+  } else if (isError) {
+    // Always log request + response on errors, even without --debug
+    console.error(`\n❌ API ${method} ${url} → ${status}`);
+    if (requestBody) {
+      console.error(`📤 Request body:`, JSON.stringify(requestBody, null, 2));
+    }
+    console.error(`📥 Response body:`, responseBody || '(empty)');
+  }
+}
+
+/**
  * Create an integration secret in Telnyx from a provider's API key.
  *
  * @param {Object} options
  * @param {string} options.identifier - Unique identifier for the secret
  * @param {string} options.token - The API key/token to store
  * @param {string} options.telnyxApiKey - Telnyx API key for authentication
+ * @param {boolean} [options.debug] - Enable debug logging
  * @returns {Promise<{id: string, identifier: string}>}
  */
-async function createIntegrationSecret({ identifier, token, telnyxApiKey }) {
+async function createIntegrationSecret({ identifier, token, telnyxApiKey, debug }) {
   console.log(`🔐 Creating integration secret: ${identifier}`);
+
+  const requestBody = {
+    identifier: identifier,
+    type: 'bearer',
+    token: token
+  };
 
   const response = await fetch(TELNYX_SECRETS_ENDPOINT, {
     method: 'POST',
@@ -53,19 +90,25 @@ async function createIntegrationSecret({ identifier, token, telnyxApiKey }) {
       'Authorization': `Bearer ${telnyxApiKey}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      identifier: identifier,
-      type: 'bearer',
-      token: token
-    })
+    body: JSON.stringify(requestBody)
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to create integration secret: ${response.status} - ${errorText}`);
+  const responseText = await response.text();
+  const isError = !response.ok;
+
+  // Redact token in debug output
+  const safeRequestBody = { ...requestBody, token: '***REDACTED***' };
+  logApiCall({
+    method: 'POST', url: TELNYX_SECRETS_ENDPOINT,
+    requestBody: safeRequestBody, status: response.status,
+    responseBody: responseText, debug, isError
+  });
+
+  if (isError) {
+    throw new Error(`Failed to create integration secret: ${response.status} - ${responseText}`);
   }
 
-  const data = await response.json();
+  const data = JSON.parse(responseText);
   console.log(`✅ Integration secret created: ${data.data.identifier}`);
   
   return {
@@ -80,10 +123,12 @@ async function createIntegrationSecret({ identifier, token, telnyxApiKey }) {
  * @param {Object} options
  * @param {string} options.assistantId - The Telnyx assistant ID
  * @param {string} options.telnyxApiKey - Telnyx API key
+ * @param {boolean} [options.debug] - Enable debug logging
  * @returns {Promise<Object>} - Assistant details
  */
-export async function getAssistant({ assistantId, telnyxApiKey }) {
-  const response = await fetch(`${TELNYX_ASSISTANTS_ENDPOINT}/${assistantId}`, {
+export async function getAssistant({ assistantId, telnyxApiKey, debug }) {
+  const url = `${TELNYX_ASSISTANTS_ENDPOINT}/${assistantId}`;
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${telnyxApiKey}`,
@@ -91,12 +136,20 @@ export async function getAssistant({ assistantId, telnyxApiKey }) {
     }
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to get assistant: ${response.status} ${errorText}`);
+  const responseText = await response.text();
+  const isError = !response.ok;
+
+  logApiCall({
+    method: 'GET', url,
+    status: response.status,
+    responseBody: responseText, debug, isError
+  });
+
+  if (isError) {
+    throw new Error(`Failed to get assistant: ${response.status} ${responseText}`);
   }
 
-  const data = await response.json();
+  const data = JSON.parse(responseText);
   
   // API returns data at root level for single assistant GET
   if (!data.id) {
@@ -113,9 +166,10 @@ export async function getAssistant({ assistantId, telnyxApiKey }) {
  * @param {string} options.assistantId - The Telnyx assistant ID
  * @param {string} options.telnyxApiKey - Telnyx API key
  * @param {Object} options.assistant - Optional existing assistant data to preserve settings
+ * @param {boolean} [options.debug] - Enable debug logging
  * @returns {Promise<boolean>} - true if successful
  */
-export async function enableWebCalls({ assistantId, telnyxApiKey, assistant }) {
+export async function enableWebCalls({ assistantId, telnyxApiKey, assistant, debug }) {
   console.log(`🔧 Enabling unauthenticated web calls for assistant ${assistantId}...`);
   
   // Preserve existing telephony_settings and just enable web calls
@@ -135,8 +189,9 @@ export async function enableWebCalls({ assistantId, telnyxApiKey, assistant }) {
   } else {
     requestBody.widget_settings = DEFAULT_WIDGET_SETTINGS;
   }
-  
-  const response = await fetch(`${TELNYX_ASSISTANTS_ENDPOINT}/${assistantId}`, {
+
+  const url = `${TELNYX_ASSISTANTS_ENDPOINT}/${assistantId}`;
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${telnyxApiKey}`,
@@ -145,9 +200,17 @@ export async function enableWebCalls({ assistantId, telnyxApiKey, assistant }) {
     body: JSON.stringify(requestBody)
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to enable web calls: ${response.status} ${errorText}`);
+  const responseText = await response.text();
+  const isError = !response.ok;
+
+  logApiCall({
+    method: 'POST', url,
+    requestBody, status: response.status,
+    responseBody: responseText, debug, isError
+  });
+
+  if (isError) {
+    throw new Error(`Failed to enable web calls: ${response.status} ${responseText}`);
   }
 
   console.log(`✅ Unauthenticated web calls enabled`);
@@ -175,9 +238,10 @@ function sleep(ms) {
  * @param {string} options.assistantName - The original assistant name
  * @param {string} options.telnyxApiKey - Telnyx API key for authentication
  * @param {string} options.provider - The provider name (for naming)
+ * @param {boolean} [options.debug] - Enable debug logging
  * @returns {Promise<boolean>}
  */
-async function configureImportedAssistant({ assistantId, assistantName, telnyxApiKey, provider }) {
+async function configureImportedAssistant({ assistantId, assistantName, telnyxApiKey, provider, debug }) {
   // Generate UTC timestamp suffix
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const providerLabel = provider ? `_${provider}` : '';
@@ -189,26 +253,35 @@ async function configureImportedAssistant({ assistantId, assistantName, telnyxAp
   // Retry configuration for handling 404 on recently created assistants
   const MAX_RETRIES = 5;
   const INITIAL_DELAY_MS = 500;
+
+  const url = `${TELNYX_ASSISTANTS_ENDPOINT}/${assistantId}`;
+  const requestBody = {
+    name: newName,
+    model: 'Qwen/Qwen3-235B-A22',
+    telephony_settings: {
+      supports_unauthenticated_web_calls: true
+    },
+    widget_settings: DEFAULT_WIDGET_SETTINGS
+  };
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(`${TELNYX_ASSISTANTS_ENDPOINT}/${assistantId}`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${telnyxApiKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          name: newName,
-          model: 'Qwen/Qwen3-235B-A22',
-          telephony_settings: {
-            supports_unauthenticated_web_calls: true
-          },
-          widget_settings: DEFAULT_WIDGET_SETTINGS
-        })
+        body: JSON.stringify(requestBody)
       });
 
+      const responseText = await response.text();
+
       if (response.ok) {
+        logApiCall({
+          method: 'POST', url, requestBody,
+          status: response.status, responseBody: responseText, debug, isError: false
+        });
         console.log(`✅ Assistant configured: ${newName}`);
         return true;
       }
@@ -221,8 +294,11 @@ async function configureImportedAssistant({ assistantId, assistantName, telnyxAp
         continue;
       }
 
-      // Non-retryable error or max retries exceeded
-      const errorText = await response.text();
+      // Non-retryable error or max retries exceeded — always log request + response
+      logApiCall({
+        method: 'POST', url, requestBody,
+        status: response.status, responseBody: responseText, debug, isError: true
+      });
       console.warn(`⚠️  Could not configure assistant ${assistantId}: ${response.status}`);
       if (response.status === 404) {
         console.warn(`   Assistant not found after ${MAX_RETRIES} retries. It may take longer to propagate.`);
@@ -257,9 +333,10 @@ async function configureImportedAssistant({ assistantId, assistantName, telnyxAp
  * @param {string} options.providerApiKey - The provider's private API key
  * @param {string} options.telnyxApiKey - Telnyx API key for authentication
  * @param {string} [options.assistantId] - Optional: specific assistant ID to import
+ * @param {boolean} [options.debug] - Enable debug logging of API requests/responses
  * @returns {Promise<{assistants: Array<{id: string, name: string}>, assistantId: string}>}
  */
-export async function importAssistantsFromProvider({ provider, providerApiKey, telnyxApiKey, assistantId }) {
+export async function importAssistantsFromProvider({ provider, providerApiKey, telnyxApiKey, assistantId, debug }) {
   // Validate provider
   if (!SUPPORTED_PROVIDERS.includes(provider)) {
     throw new Error(`Unsupported provider: ${provider}. Supported providers: ${SUPPORTED_PROVIDERS.join(', ')}`);
@@ -273,7 +350,8 @@ export async function importAssistantsFromProvider({ provider, providerApiKey, t
     const secret = await createIntegrationSecret({
       identifier: secretIdentifier,
       token: providerApiKey,
-      telnyxApiKey
+      telnyxApiKey,
+      debug
     });
 
     // Step 2: Import assistant using the secret reference
@@ -295,12 +373,20 @@ export async function importAssistantsFromProvider({ provider, providerApiKey, t
       body: JSON.stringify(importBody)
     });
 
-    if (!importResponse.ok) {
-      const errorText = await importResponse.text();
-      throw new Error(`Telnyx import API failed with status ${importResponse.status}: ${errorText}`);
+    const importResponseText = await importResponse.text();
+    const importIsError = !importResponse.ok;
+
+    logApiCall({
+      method: 'POST', url: TELNYX_IMPORT_ENDPOINT,
+      requestBody: importBody, status: importResponse.status,
+      responseBody: importResponseText, debug, isError: importIsError
+    });
+
+    if (importIsError) {
+      throw new Error(`Telnyx import API failed with status ${importResponse.status}: ${importResponseText}`);
     }
 
-    const importData = await importResponse.json();
+    const importData = JSON.parse(importResponseText);
     const assistants = importData.data || [];
 
     if (assistants.length === 0) {
@@ -332,7 +418,8 @@ export async function importAssistantsFromProvider({ provider, providerApiKey, t
         assistantId: importedAssistant.id,
         assistantName: importedAssistant.name,
         telnyxApiKey,
-        provider
+        provider,
+        debug
       });
     }
 
