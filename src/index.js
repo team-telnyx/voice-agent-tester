@@ -87,6 +87,50 @@ function substituteUrlParams(url, params) {
   return result;
 }
 
+/**
+ * Get the list of missing provider-specific parameters required for comparison mode.
+ * Each provider has its own set of required params for the direct widget benchmark.
+ *
+ * @param {Object} argv - Parsed CLI arguments
+ * @returns {Array<{key: string, flag: string, description: string}>} Missing params
+ */
+function getCompareRequiredParams(argv) {
+  const missing = [];
+
+  switch (argv.provider) {
+    case 'vapi':
+      if (!argv.shareKey) {
+        missing.push({ key: 'shareKey', flag: '--share-key', description: 'Vapi share key' });
+      }
+      break;
+    case 'elevenlabs':
+      if (!argv.branchId) {
+        missing.push({ key: 'branchId', flag: '--branch-id', description: 'ElevenLabs branch ID' });
+      }
+      break;
+    // retell and others: no extra params needed yet
+  }
+
+  return missing;
+}
+
+/**
+ * Get provider-specific template parameters for comparison mode URL/HTML substitution.
+ *
+ * @param {Object} argv - Parsed CLI arguments
+ * @returns {Object} Template params to merge into provider params
+ */
+function getCompareTemplateParams(argv) {
+  switch (argv.provider) {
+    case 'vapi':
+      return { shareKey: argv.shareKey };
+    case 'elevenlabs':
+      return { branchId: argv.branchId };
+    default:
+      return {};
+  }
+}
+
 // Helper function to load and validate application config
 function loadApplicationConfig(configPath, params = {}) {
   const configFile = fs.readFileSync(configPath, 'utf8');
@@ -235,9 +279,13 @@ const argv = yargs(hideBin(process.argv))
     type: 'string',
     description: 'Provider assistant/agent ID to import (required with --provider)'
   })
-  .option('provider-public-key', {
+  .option('share-key', {
     type: 'string',
-    description: 'External provider public/browser API key for direct widget testing (required when comparison mode is enabled)'
+    description: 'Vapi share key for direct widget testing (required for comparison mode with --provider vapi)'
+  })
+  .option('branch-id', {
+    type: 'string',
+    description: 'ElevenLabs branch ID for direct widget testing (required for comparison mode with --provider elevenlabs)'
   })
   .option('assistant-id', {
     type: 'string',
@@ -496,17 +544,23 @@ async function main() {
         }
       }
 
-      // Require provider public key when comparison mode is enabled
-      if (shouldCompare && !argv.providerPublicKey) {
-        console.log(`\n🔑 ${argv.provider} public/browser API key is required for comparison mode`);
-        const inputKey = await promptUserInput(`Enter your ${argv.provider} public API key (or press Enter to skip comparison): `);
-        if (inputKey) {
-          argv.providerPublicKey = inputKey;
-        } else {
-          console.warn(`⚠️  No public key provided. Disabling comparison mode (--no-compare).`);
-          console.warn(`   To run comparison benchmarks, pass --provider-public-key <key>\n`);
-          argv.compare = false;
-          argv.noCompare = true;
+      // Require provider-specific params when comparison mode is enabled
+      if (shouldCompare) {
+        const missingParams = getCompareRequiredParams(argv);
+        if (missingParams.length > 0) {
+          for (const param of missingParams) {
+            console.log(`\n🔑 ${param.description} is required for comparison mode`);
+            const inputVal = await promptUserInput(`Enter ${param.description} (or press Enter to skip comparison): `);
+            if (inputVal) {
+              argv[param.key] = inputVal;
+            } else {
+              console.warn(`⚠️  Missing ${param.flag}. Disabling comparison mode (--no-compare).`);
+              console.warn(`   To run comparison benchmarks, pass ${param.flag} <value>\n`);
+              argv.compare = false;
+              argv.noCompare = true;
+              break;
+            }
+          }
         }
       }
 
@@ -604,7 +658,7 @@ async function main() {
 
       // Phase 1: Provider Direct Benchmark
       // Load provider-specific application config with provider assistant ID
-      const providerParams = { ...params, assistantId: providerImportId, providerApiKey: argv.providerPublicKey };
+      const providerParams = { ...params, assistantId: providerImportId, ...getCompareTemplateParams(argv) };
       const providerAppPath = path.resolve(__packageDir, 'applications', `${argv.provider}.yaml`);
       
       if (!fs.existsSync(providerAppPath)) {
