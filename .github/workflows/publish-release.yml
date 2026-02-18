@@ -19,8 +19,8 @@ jobs:
 
       - name: Setup Git user
         run: |
-          git config user.name TelnyxIntegrations
-          git config user.email integrations@telnyx.com
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Use Node.js 20.x
         uses: actions/setup-node@v4
