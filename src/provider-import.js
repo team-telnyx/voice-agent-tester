@@ -200,7 +200,7 @@ async function configureImportedAssistant({ assistantId, assistantName, telnyxAp
         },
         body: JSON.stringify({
           name: newName,
-          model: 'Qwen/Qwen3-235B-A22',
+          model: 'Qwen/Qwen3-235B-A22B',
           telephony_settings: {
             supports_unauthenticated_web_calls: true
           },
