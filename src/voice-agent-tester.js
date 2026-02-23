@@ -330,7 +330,8 @@ export class VoiceAgentTester {
     await this.page.exposeFunction('__publishEvent', (eventType, data) => {
       const event = { eventType, data, timestamp: Date.now() };
 
-      console.log(`\t📢 Event received: ${eventType}`);
+      const elementSuffix = data && data.elementId ? ` (audio element: ${data.elementId})` : '';
+      console.log(`\t📢 ${eventType}${elementSuffix}`);
 
       // Check if there are any pending promises waiting for this event type
       const pendingPromises = this.pendingPromises.get(eventType);

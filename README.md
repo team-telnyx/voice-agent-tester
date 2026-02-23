@@ -31,6 +31,8 @@ voice-agent-tester -a applications/telnyx.yaml -s scenarios/appointment.yaml --a
 | `--provider` | | Import from provider (`vapi`, `elevenlabs`, `retell`) |
 | `--provider-api-key` | | External provider API key (required with `--provider`) |
 | `--provider-import-id` | | Provider assistant ID to import (required with `--provider`) |
+| `--share-key` | | Vapi share key for comparison mode (prompted if missing) |
+| `--branch-id` | | ElevenLabs branch ID for comparison mode (prompted if missing) |
 | `--compare` | `true` | Run both provider direct and Telnyx import benchmarks |
 | `--no-compare` | | Disable comparison (run only Telnyx import) |
 | `-d, --debug` | `false` | Enable detailed timeout diagnostics |
@@ -190,20 +192,45 @@ When importing from an external provider, the tool automatically runs both bench
 1. **Provider Direct** - Benchmarks the assistant on the original provider's widget
 2. **Telnyx Import** - Benchmarks the same assistant after importing to Telnyx
 
+### Provider-Specific Keys
+
+Comparison mode requires a provider-specific key to load the provider's direct widget. If not passed via CLI, the tool will prompt you with instructions on how to find it.
+
+| Provider | Flag | How to find it |
+|----------|------|----------------|
+| Vapi | `--share-key` | In the Vapi Dashboard, select your assistant, then click the link icon (🔗) next to the assistant ID at the top. This copies the demo link containing your share key. |
+| ElevenLabs | `--branch-id` | In the ElevenLabs Dashboard, go to Agents, select your target agent, then click the dropdown next to Publish and select "Copy shareable link". This copies the demo link containing your branch ID. |
+
 ### Import and Compare (Default)
+
+**Vapi:**
 
 ```bash
 npx @telnyx/voice-agent-tester@latest \
   -a applications/telnyx.yaml \
   -s scenarios/appointment.yaml \
   --provider vapi \
+  --share-key <VAPI_SHARE_KEY> \
   --api-key <TELNYX_KEY> \
   --provider-api-key <VAPI_KEY> \
   --provider-import-id <VAPI_ASSISTANT_ID>
 ```
 
+**ElevenLabs:**
+
+```bash
+npx @telnyx/voice-agent-tester@latest \
+  -a applications/telnyx.yaml \
+  -s scenarios/appointment.yaml \
+  --provider elevenlabs \
+  --branch-id <ELEVENLABS_BRANCH_ID> \
+  --api-key <TELNYX_KEY> \
+  --provider-api-key <ELEVENLABS_KEY> \
+  --provider-import-id <ELEVENLABS_AGENT_ID>
+```
+
 This will:
-- Run Phase 1: VAPI direct benchmark
+- Run Phase 1: Provider direct benchmark
 - Run Phase 2: Telnyx import benchmark
 - Generate a side-by-side latency comparison report
 
