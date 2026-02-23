@@ -100,12 +100,22 @@ function getCompareRequiredParams(argv) {
   switch (argv.provider) {
     case 'vapi':
       if (!argv.shareKey) {
-        missing.push({ key: 'shareKey', flag: '--share-key', description: 'Vapi share key' });
+        missing.push({
+          key: 'shareKey',
+          flag: '--share-key',
+          description: 'Vapi share key',
+          hint: 'In the Vapi Dashboard, select your assistant, then click the link icon (🔗) next to the assistant ID at the top. This copies the demo link containing your share key.'
+        });
       }
       break;
     case 'elevenlabs':
       if (!argv.branchId) {
-        missing.push({ key: 'branchId', flag: '--branch-id', description: 'ElevenLabs branch ID' });
+        missing.push({
+          key: 'branchId',
+          flag: '--branch-id',
+          description: 'ElevenLabs branch ID',
+          hint: 'In the ElevenLabs Dashboard, go to Agents, select your target agent, then click the dropdown next to Publish and select "Copy shareable link". This copies the demo link containing your branch ID.'
+        });
       }
       break;
     // retell and others: no extra params needed yet
@@ -550,6 +560,9 @@ async function main() {
         if (missingParams.length > 0) {
           for (const param of missingParams) {
             console.log(`\n🔑 ${param.description} is required for comparison mode`);
+            if (param.hint) {
+              console.log(`   ${param.hint}`);
+            }
             const inputVal = await promptUserInput(`Enter ${param.description} (or press Enter to skip comparison): `);
             if (inputVal) {
               argv[param.key] = inputVal;
