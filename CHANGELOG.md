@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.2](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.1...v0.4.2) (2026-02-23)
+
+### Features
+
+* add dashboard hints for Vapi and ElevenLabs comparison mode params ([#16](https://github.com/team-telnyx/voice-agent-tester/issues/16)) ([7fda40b](https://github.com/team-telnyx/voice-agent-tester/commit/7fda40b6971a968dde1fc1c3466662227a3bc77e))
+
+### Chores
+
+* improve event logs and comparison mode docs ([#17](https://github.com/team-telnyx/voice-agent-tester/issues/17)) ([24a9683](https://github.com/team-telnyx/voice-agent-tester/commit/24a968337a0b4a6c2d6baddd0aa507d5a87c9488))
+
 ## [0.4.1](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.0...v0.4.1) (2026-02-18)
 
 ### Features
