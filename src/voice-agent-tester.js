@@ -535,6 +535,9 @@ export class VoiceAgentTester {
         case 'screenshot':
           handlerResult = await this.handleScreenshot(step);
           break;
+        case 'click_with_retry':
+          handlerResult = await this.handleClickWithRetry(step);
+          break;
 
         default:
           console.log(`Unknown action: ${action}`);
@@ -577,10 +580,173 @@ export class VoiceAgentTester {
     await this.page.click(selector);
   }
 
+  async handleClickWithRetry(step) {
+    const selector = step.selector;
+    if (!selector) {
+      throw new Error('No selector specified for click_with_retry action');
+    }
+
+    const maxRetries = step.retries || 2;
+    const retryDelay = step.retryDelay || 3000;
+    const checkDelay = step.checkDelay || 4000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      let clicked = false;
+      try {
+        await this.page.waitForSelector(selector, { timeout: attempt === 1 ? 30000 : 5000 });
+        await this.page.click(selector);
+        clicked = true;
+      } catch {
+        // Selector not found — will check for widget config errors below
+      }
+
+      if (!clicked) {
+        // Check if the widget is showing a configuration error
+        const widgetState = await this._getWidgetErrorState(selector);
+
+        if (widgetState.isConfigError) {
+          // Widget is showing "unauthenticated web calls" or similar config error.
+          // This means the API config hasn't propagated to the widget yet.
+          if (attempt < maxRetries) {
+            console.log(`\t⚠️ Click attempt ${attempt}/${maxRetries}: widget not ready — "${widgetState.errorText}"`);
+            console.log(`\t⏳ Waiting for configuration to propagate (reloading in ${retryDelay}ms)...`);
+            await this.sleep(retryDelay);
+            await this.page.reload({ waitUntil: 'networkidle0', timeout: 30000 });
+            await this.sleep(2000); // extra time after reload
+            continue;
+          }
+          throw new Error(
+            `Widget configuration not ready after ${maxRetries} attempts: "${widgetState.errorText}"\n` +
+            `The "Supports Unauthenticated Web Calls" setting may not have propagated yet.\n` +
+            `Try running again in a few seconds, or verify the setting in the Telnyx portal.`
+          );
+        }
+
+        // Not a config error — genuinely missing selector
+        if (attempt < maxRetries) {
+          console.log(`\t⚠️ Click attempt ${attempt}/${maxRetries}: selector not found, retrying in ${retryDelay}ms...`);
+          await this.sleep(retryDelay);
+          continue;
+        }
+        throw new Error(`Selector "${selector}" not found after ${maxRetries} attempts`);
+      }
+
+      console.log(`\t🖱️ Click attempt ${attempt}/${maxRetries}`);
+
+      // Wait for connection to establish
+      await this.sleep(checkDelay);
+
+      // Check if audio elements are monitored or WebRTC connections exist
+      const status = await this._checkConnectionStatus();
+
+      if (status.isConnected) {
+        console.log(`\t✅ Connection established (monitored: ${status.monitoredElements}, rtc: ${status.rtcConnections})`);
+        return;
+      }
+
+      if (attempt < maxRetries) {
+        console.log(`\t⚠️ No connection detected (monitored: ${status.monitoredElements}, rtc: ${status.rtcConnections}), retrying in ${retryDelay}ms...`);
+        await this.sleep(retryDelay);
+      } else {
+        console.log(`\t⚠️ No connection detected after ${maxRetries} attempts, proceeding anyway`);
+      }
+    }
+  }
+
+  /**
+   * Check if a widget is showing a configuration error (e.g., "unauthenticated web calls" not enabled).
+   * Inspects the shadow DOM for error indicators.
+   */
+  async _getWidgetErrorState(selector) {
+    const parts = selector.split('>>>').map(s => s.trim());
+    const hostSelector = parts[0];
+
+    return await this.page.evaluate((host) => {
+      const el = document.querySelector(host);
+      if (!el || !el.shadowRoot) return { isConfigError: false };
+
+      const text = el.shadowRoot.textContent || '';
+
+      // Check for known configuration error messages
+      const configErrors = [
+        'unauthenticated web calls',
+        'support unauthenticated',
+        'not configured',
+        'configuration required'
+      ];
+
+      const lowerText = text.toLowerCase();
+      for (const pattern of configErrors) {
+        if (lowerText.includes(pattern)) {
+          // Extract a readable error message
+          const errorText = text.trim().replace(/\s+/g, ' ').substring(0, 200);
+          return { isConfigError: true, errorText };
+        }
+      }
+
+      return { isConfigError: false };
+    }, hostSelector);
+  }
+
+  async _checkConnectionStatus() {
+    const status = await this.page.evaluate(() => {
+      const info = { monitoredElements: 0, hasActiveConnection: false };
+
+      if (window.audioMonitor && window.audioMonitor.monitoredElements) {
+        info.monitoredElements = window.audioMonitor.monitoredElements.size;
+      }
+
+      document.querySelectorAll('audio').forEach(el => {
+        if (el.srcObject) info.hasActiveConnection = true;
+      });
+
+      return info;
+    });
+
+    let rtcConnections = 0;
+    try {
+      const rtpStats = await this.page.evaluate(async () => {
+        if (typeof window.__getRtpStats === 'function') {
+          return await window.__getRtpStats();
+        }
+        return null;
+      });
+      if (rtpStats) rtcConnections = rtpStats.connectionCount || 0;
+    } catch {
+      // Ignore RTP stats errors
+    }
+
+    return {
+      monitoredElements: status.monitoredElements,
+      rtcConnections,
+      isConnected: status.monitoredElements > 0 || status.hasActiveConnection || rtcConnections > 0
+    };
+  }
+
   async handleWaitForVoice() {
     if (this.debug) {
       console.log('\t⏳ Waiting for audio to start (AI agent response)...');
     }
+
+    // Check if audio is already playing before waiting for a new event.
+    // This handles the case where audiostart fired before we started listening
+    // (e.g., during click_with_retry or between steps).
+    const alreadyPlaying = await this.page.evaluate(() => {
+      if (window.audioMonitor && window.audioMonitor.monitoredElements) {
+        for (const [, data] of window.audioMonitor.monitoredElements) {
+          if (data.isPlaying) return true;
+        }
+      }
+      return false;
+    });
+
+    if (alreadyPlaying) {
+      if (this.debug) {
+        console.log('\t✅ Audio already playing');
+      }
+      return;
+    }
+
     await this.waitForAudioEvent('audiostart');
     if (this.debug) {
       console.log('\t✅ Audio detected');
@@ -591,6 +757,27 @@ export class VoiceAgentTester {
     if (this.debug) {
       console.log('\t⏳ Waiting for audio to stop (silence)...');
     }
+
+    // Check if all monitored elements are already silent.
+    // This handles the case where audiostop fired before we started listening.
+    const allSilent = await this.page.evaluate(() => {
+      if (window.audioMonitor && window.audioMonitor.monitoredElements) {
+        if (window.audioMonitor.monitoredElements.size === 0) return false; // no elements yet
+        for (const [, data] of window.audioMonitor.monitoredElements) {
+          if (data.isPlaying) return false;
+        }
+        return true; // all elements exist and are silent
+      }
+      return false;
+    });
+
+    if (allSilent) {
+      if (this.debug) {
+        console.log('\t✅ Already silent');
+      }
+      return;
+    }
+
     await this.waitForAudioEvent('audiostop');
     if (this.debug) {
       console.log('\t✅ Silence detected');
