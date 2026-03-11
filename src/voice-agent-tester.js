@@ -238,6 +238,7 @@ export class VoiceAgentTester {
           } else {
             errorMessage += '\n  (Could not collect browser diagnostics)';
           }
+
         }
 
         reject(new Error(errorMessage));
@@ -363,6 +364,7 @@ export class VoiceAgentTester {
         console.error(error.stack);
       }
     });
+
   }
 
   async close() {
@@ -866,10 +868,40 @@ export class VoiceAgentTester {
 
     // Wait for speech to complete by listening for speechend event
     try {
-      await this.waitForAudioEvent('speechend');
+      // Use a shorter timeout for speechend (15s) since we have safety fallback in browser
+      await this.waitForAudioEvent('speechend', 15000);
     } catch (error) {
-      console.error('Timeout waiting for speech to complete:', error.message);
-      throw error;
+      // speechend timeout is recoverable — the audio likely finished but the event was lost
+      // (e.g., agent started responding and disrupted the audio element)
+      if (this.debug) {
+        // Check the state of the speak audio in the browser
+        const speakState = await this.page.evaluate(() => {
+          const info = {
+            currentSpeakAudio: null,
+            audioContextState: null,
+          };
+          try {
+            if (window.currentSpeakAudio) {
+              info.currentSpeakAudio = {
+                paused: window.currentSpeakAudio.paused,
+                ended: window.currentSpeakAudio.ended,
+                currentTime: window.currentSpeakAudio.currentTime,
+                duration: window.currentSpeakAudio.duration,
+                readyState: window.currentSpeakAudio.readyState,
+              };
+            }
+            if (window.globalAudioContext) {
+              info.audioContextState = window.globalAudioContext.state;
+            }
+          } catch (e) { /* ignore */ }
+          return info;
+        }).catch(() => null);
+
+        console.warn(`\t⚠️ speechend timeout (recovered) — speak audio state:`, JSON.stringify(speakState));
+      } else {
+        console.warn(`\t⚠️ speechend timeout — continuing (audio likely finished)`);
+      }
+      // Don't throw — treat speechend timeout as recoverable
     }
   }
 

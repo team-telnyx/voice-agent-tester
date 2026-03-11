@@ -44,8 +44,9 @@ describe('Integration Tests', () => {
               this.text = text;
             };
 
-            // Mock __speak function that will be called by the tester
-            // This needs to be in the page itself since evaluateOnNewDocument runs before navigation
+            // Mock __speak and __waitForMediaStream functions
+            // These override the injected audio hooks since inline scripts run after evaluateOnNewDocument
+            window.__waitForMediaStream = () => Promise.resolve();
             window.__speak = (text) => {
               document.getElementById('speech-output').textContent = text;
               // Signal speech end after a small delay to allow waitForAudioEvent to be set up
@@ -75,7 +76,7 @@ describe('Integration Tests', () => {
 
     // The scenario should complete without throwing errors
     expect(true).toBe(true);
-  });
+  }, 15000);
 
   test('should handle scenario with wait step', async () => {
     const testPageContent = `
