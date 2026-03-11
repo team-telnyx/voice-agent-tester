@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.3](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.2...v0.4.3) (2026-03-11)
+
+### Features
+
+* add click_with_retry action and fix audio event race conditions ([#19](https://github.com/team-telnyx/voice-agent-tester/issues/19)) ([#19](https://github.com/team-telnyx/voice-agent-tester/issues/19)) ([13e2009](https://github.com/team-telnyx/voice-agent-tester/commit/13e2009a94b4e2f7e05972f01a47c9b31758bf58))
+
+### Chores
+
+* release v0.4.2 ([#18](https://github.com/team-telnyx/voice-agent-tester/issues/18)) ([1cf64ef](https://github.com/team-telnyx/voice-agent-tester/commit/1cf64ef563e813c2f06b2b655bfcc414637594cb))
+
 ## [0.4.2](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.1...v0.4.2) (2026-02-23)
 
 ### Features
