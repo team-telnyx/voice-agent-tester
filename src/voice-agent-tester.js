@@ -26,8 +26,6 @@ export class VoiceAgentTester {
     this.recordingFile = null;
     this.audioUrl = options.audioUrl || null;
     this.audioVolume = options.audioVolume || 1.0;
-    this.cdpSession = null;
-    this.wsMessages = []; // Captured WebSocket frames when debug is enabled
   }
 
   sleep(time) {
@@ -241,37 +239,6 @@ export class VoiceAgentTester {
             errorMessage += '\n  (Could not collect browser diagnostics)';
           }
 
-          // Dump WebSocket summary at timeout
-          if (this.wsMessages && this.wsMessages.length > 0) {
-            errorMessage += `\n\n🔌 WebSocket Messages (${this.wsMessages.length} frames):`;
-            for (const msg of this.wsMessages) {
-              const time = new Date(msg.ts).toISOString().split('T')[1];
-              if (msg.type === 'created') {
-                errorMessage += `\n  ${time} CONNECT ${msg.url}`;
-              } else if (msg.type === 'closed') {
-                errorMessage += `\n  ${time} DISCONNECT`;
-              } else if (msg.type === 'error') {
-                errorMessage += `\n  ${time} ERROR ${msg.error}`;
-              } else if (msg.payload) {
-                const p = msg.payload;
-                const dir = msg.type === 'sent' ? '→' : '←';
-                const method = p.method || p.type || p.event || '?';
-                const ids = [];
-                if (p.id) ids.push(`id=${p.id}`);
-                if (p.callId || p.call_id) ids.push(`callId=${p.callId || p.call_id}`);
-                if (p.dialogParams?.callID) ids.push(`callID=${p.dialogParams.callID}`);
-                if (p.params?.callID) ids.push(`callID=${p.params.callID}`);
-                if (p.params?.sessid) ids.push(`sessid=${p.params.sessid}`);
-                if (p.sessid) ids.push(`sessid=${p.sessid}`);
-                const idStr = ids.length > 0 ? ` [${ids.join(', ')}]` : '';
-                let extra = '';
-                if (p.params?.sdp) extra = ' (SDP)';
-                if (p.result?.sdp) extra = ' (SDP answer)';
-                if (p.error) extra += ` ERROR=${JSON.stringify(p.error)}`;
-                errorMessage += `\n  ${time} ${dir} ${method}${idStr}${extra}`;
-              }
-            }
-          }
         }
 
         reject(new Error(errorMessage));
@@ -398,10 +365,6 @@ export class VoiceAgentTester {
       }
     });
 
-    // Enable WebSocket frame capture via CDP when debug is enabled
-    if (this.debug) {
-      await this._enableWebSocketDebug();
-    }
   }
 
   async close() {
@@ -419,18 +382,6 @@ export class VoiceAgentTester {
         }
       }
       this.pendingPromises.clear();
-
-      // Dump WebSocket summary before closing if debug is enabled
-      if (this.debug) {
-        this._dumpWebSocketSummary();
-      }
-
-      // Detach CDP session
-      if (this.cdpSession) {
-        try { await this.cdpSession.detach(); } catch { /* ignore */ }
-        this.cdpSession = null;
-      }
-      this.wsMessages = [];
 
       await this.browser.close();
       this.browser = null;
@@ -737,118 +688,6 @@ export class VoiceAgentTester {
 
       return { isConfigError: false };
     }, hostSelector);
-  }
-
-  async _enableWebSocketDebug() {
-    if (!this.page) return;
-
-    try {
-      this.cdpSession = await this.page.createCDPSession();
-      await this.cdpSession.send('Network.enable');
-
-      this.wsMessages = [];
-      const ws = this;
-
-      this.cdpSession.on('Network.webSocketCreated', ({ requestId, url }) => {
-        console.log(`\t🔌 [WS] Created: ${url}`);
-        ws.wsMessages.push({ ts: Date.now(), type: 'created', requestId, url });
-      });
-
-      this.cdpSession.on('Network.webSocketClosed', ({ requestId }) => {
-        console.log(`\t🔌 [WS] Closed: requestId=${requestId}`);
-        ws.wsMessages.push({ ts: Date.now(), type: 'closed', requestId });
-      });
-
-      this.cdpSession.on('Network.webSocketFrameSent', ({ requestId, response }) => {
-        const payload = response.payloadData;
-        // Log signaling frames (JSON), skip binary audio frames
-        if (payload && payload.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(payload);
-            const method = parsed.method || parsed.type || parsed.event || Object.keys(parsed).slice(0, 3).join(',');
-            const id = parsed.id || parsed.callId || parsed.call_id || parsed.dialogParams?.callID || '';
-            console.log(`\t📤 [WS] Sent: method=${method}${id ? ` id=${id}` : ''}`);
-            ws.wsMessages.push({ ts: Date.now(), type: 'sent', requestId, method, id, payload: parsed });
-          } catch {
-            console.log(`\t📤 [WS] Sent: ${payload.substring(0, 200)}`);
-            ws.wsMessages.push({ ts: Date.now(), type: 'sent', requestId, raw: payload.substring(0, 500) });
-          }
-        }
-      });
-
-      this.cdpSession.on('Network.webSocketFrameReceived', ({ requestId, response }) => {
-        const payload = response.payloadData;
-        if (payload && payload.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(payload);
-            const method = parsed.method || parsed.type || parsed.event || Object.keys(parsed).slice(0, 3).join(',');
-            const id = parsed.id || parsed.callId || parsed.call_id || parsed.dialogParams?.callID || '';
-            console.log(`\t📥 [WS] Recv: method=${method}${id ? ` id=${id}` : ''}`);
-            ws.wsMessages.push({ ts: Date.now(), type: 'recv', requestId, method, id, payload: parsed });
-          } catch {
-            console.log(`\t📥 [WS] Recv: ${payload.substring(0, 200)}`);
-            ws.wsMessages.push({ ts: Date.now(), type: 'recv', requestId, raw: payload.substring(0, 500) });
-          }
-        }
-      });
-
-      this.cdpSession.on('Network.webSocketFrameError', ({ requestId, errorMessage }) => {
-        console.log(`\t❌ [WS] Error: requestId=${requestId} ${errorMessage}`);
-        ws.wsMessages.push({ ts: Date.now(), type: 'error', requestId, error: errorMessage });
-      });
-
-    } catch (error) {
-      console.warn(`\t⚠️ Failed to enable WebSocket debug: ${error.message}`);
-    }
-  }
-
-  _dumpWebSocketSummary() {
-    if (!this.wsMessages || this.wsMessages.length === 0) {
-      console.log('\n\t📋 [WS Summary] No WebSocket messages captured');
-      return;
-    }
-
-    console.log(`\n\t📋 [WS Summary] ${this.wsMessages.length} total frames captured`);
-    console.log('\t' + '─'.repeat(80));
-
-    for (const msg of this.wsMessages) {
-      const time = new Date(msg.ts).toISOString().split('T')[1];
-      const dir = msg.type === 'sent' ? '📤→' : msg.type === 'recv' ? '📥←' : `🔌${msg.type}`;
-
-      if (msg.type === 'created') {
-        console.log(`\t${time} ${dir} CONNECT ${msg.url}`);
-      } else if (msg.type === 'closed') {
-        console.log(`\t${time} ${dir} DISCONNECT reqId=${msg.requestId}`);
-      } else if (msg.type === 'error') {
-        console.log(`\t${time} ❌ ERROR ${msg.error}`);
-      } else if (msg.payload) {
-        const p = msg.payload;
-        // Extract interesting IDs from the payload
-        const ids = [];
-        if (p.id) ids.push(`id=${p.id}`);
-        if (p.callId || p.call_id) ids.push(`callId=${p.callId || p.call_id}`);
-        if (p.dialogParams?.callID) ids.push(`dialogCallID=${p.dialogParams.callID}`);
-        if (p.params?.callID) ids.push(`callID=${p.params.callID}`);
-        if (p.sessid) ids.push(`sessid=${p.sessid}`);
-        if (p.params?.sessid) ids.push(`sessid=${p.params.sessid}`);
-        if (p.jsonrpc_id || p.jsonrpc) ids.push(`jsonrpc=${p.jsonrpc}`);
-
-        const method = p.method || p.type || p.event || '?';
-        const idStr = ids.length > 0 ? ` [${ids.join(', ')}]` : '';
-
-        // For verto/telnyx, show key params
-        let extra = '';
-        if (p.params?.sdp) extra = ' (SDP)';
-        if (p.result?.sdp) extra = ' (SDP answer)';
-        if (p.params?.dialogParams) extra += ` caller=${p.params.dialogParams.caller_id_number || '?'}`;
-        if (p.error) extra += ` ERROR: ${JSON.stringify(p.error)}`;
-
-        console.log(`\t${time} ${dir} ${method}${idStr}${extra}`);
-      } else {
-        console.log(`\t${time} ${dir} ${msg.raw || '(binary)'}`);
-      }
-    }
-    console.log('\t' + '─'.repeat(80));
   }
 
   async _checkConnectionStatus() {
