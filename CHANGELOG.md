@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.4](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.3...v0.4.4) (2026-03-11)
+
+### Features
+
+* fix speechend race condition, add --retries flag ([#21](https://github.com/team-telnyx/voice-agent-tester/issues/21)) ([09e3b65](https://github.com/team-telnyx/voice-agent-tester/commit/09e3b6578face6c407d058991ab5495d9463e544))
+
+### Chores
+
+* release v0.4.3 ([#20](https://github.com/team-telnyx/voice-agent-tester/issues/20)) ([bdeb87b](https://github.com/team-telnyx/voice-agent-tester/commit/bdeb87bed502919a9fed9950e69242b1c2aefcfc))
+
 ## [0.4.3](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.2...v0.4.3) (2026-03-11)
 
 ### Features
