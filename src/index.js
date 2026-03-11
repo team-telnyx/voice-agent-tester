@@ -327,6 +327,11 @@ const argv = yargs(hideBin(process.argv))
     description: 'Volume level for audio input (0.0 to 1.0)',
     default: 1.0
   })
+  .option('retries', {
+    type: 'number',
+    description: 'Number of retries for failed test runs (0 = no retries)',
+    default: 0
+  })
   .help()
   .argv;
 
@@ -409,22 +414,49 @@ async function runBenchmark({ applications, scenarios, repeat, concurrency, argv
       audioVolume: argv.audioVolume
     });
 
-    try {
-      await tester.runScenario(targetUrl, app.steps, scenario.steps, app.name, scenario.name, repetition);
-      console.log(`✅ Completed successfully (Run ${runNumber}/${totalRuns})`);
-      return { success: true };
-    } catch (error) {
-      // Store only the first line for summary, but print full message here (with diagnostics)
-      const shortMessage = error.message.split('\n')[0];
-      const errorInfo = {
-        app: app.name,
-        scenario: scenario.name,
-        repetition,
-        error: shortMessage
-      };
-      // Print full diagnostics here (only place they appear)
-      console.error(`❌ Error (Run ${runNumber}/${totalRuns}):\n${error.message}`);
-      return { success: false, error: errorInfo };
+    const maxAttempts = (argv.retries || 0) + 1;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Create a fresh tester for each attempt (after first, original tester is closed)
+      const currentTester = attempt === 1 ? tester : new VoiceAgentTester({
+        verbose: argv.verbose,
+        headless: argv.headless,
+        assetsServerUrl: argv.assetsServer,
+        reportGenerator: reportGenerator,
+        record: argv.record,
+        debug: argv.debug,
+        audioUrl: argv.audioUrl,
+        audioVolume: argv.audioVolume
+      });
+
+      try {
+        await currentTester.runScenario(targetUrl, app.steps, scenario.steps, app.name, scenario.name, repetition);
+        console.log(`✅ Completed successfully (Run ${runNumber}/${totalRuns})`);
+        return { success: true };
+      } catch (error) {
+        const shortMessage = error.message.split('\n')[0];
+
+        if (attempt < maxAttempts) {
+          console.warn(`\n⚠️ Attempt ${attempt}/${maxAttempts} failed: ${shortMessage}`);
+          console.warn(`🔄 Retrying in 3s... (${maxAttempts - attempt} retries left)\n`);
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+
+        // Final attempt failed
+        const errorInfo = {
+          app: app.name,
+          scenario: scenario.name,
+          repetition,
+          error: shortMessage
+        };
+        // Print full diagnostics here (only place they appear)
+        console.error(`❌ Error (Run ${runNumber}/${totalRuns}):\n${error.message}`);
+        if (maxAttempts > 1) {
+          console.error(`   Failed after ${maxAttempts} attempts`);
+        }
+        return { success: false, error: errorInfo };
+      }
     }
   }
 
