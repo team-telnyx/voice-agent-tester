@@ -4,7 +4,8 @@ steps:
     selector: "telnyx-ai-agent"
   - action: sleep
     time: 3000
-  - action: click
+  - action: click_with_retry
     selector: "telnyx-ai-agent >>> button"
-  - action: sleep
-    time: 4000
+    retries: 5
+    checkDelay: 4000
+    retryDelay: 5000

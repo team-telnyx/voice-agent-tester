@@ -13,7 +13,3 @@ steps:
     time: 2000
   - action: speak
     text: "Hello, what can you do?"
-  - action: wait_for_voice
-    metrics: elapsed_time
-  - action: wait_for_silence
-    metrics: elapsed_time
