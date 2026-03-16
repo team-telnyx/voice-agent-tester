@@ -109,14 +109,7 @@ function getCompareRequiredParams(argv) {
       }
       break;
     case 'elevenlabs':
-      if (!argv.branchId) {
-        missing.push({
-          key: 'branchId',
-          flag: '--branch-id',
-          description: 'ElevenLabs branch ID',
-          hint: 'In the ElevenLabs Dashboard, go to Agents, select your target agent, then click the dropdown next to Publish and select "Copy shareable link". This copies the demo link containing your branch ID.'
-        });
-      }
+      // branchId is optional — the talk-to URL works with just agent_id
       break;
     // retell and others: no extra params needed yet
   }
@@ -134,8 +127,22 @@ function getCompareTemplateParams(argv) {
   switch (argv.provider) {
     case 'vapi':
       return { shareKey: argv.shareKey };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Get provider-specific extra query parameters to append to the comparison URL.
+ * Unlike template params, these are appended as-is (not substituted into {{...}} placeholders).
+ *
+ * @param {Object} argv - Parsed CLI arguments
+ * @returns {Object} Key-value pairs to append as query parameters
+ */
+function getCompareExtraQueryParams(argv) {
+  switch (argv.provider) {
     case 'elevenlabs':
-      return { branchId: argv.branchId };
+      return argv.branchId ? { branch_id: argv.branchId } : {};
     default:
       return {};
   }
@@ -295,7 +302,7 @@ const argv = yargs(hideBin(process.argv))
   })
   .option('branch-id', {
     type: 'string',
-    description: 'ElevenLabs branch ID for direct widget testing (required for comparison mode with --provider elevenlabs)'
+    description: 'ElevenLabs branch ID for direct widget testing (optional, appended to demo URL when provided)'
   })
   .option('assistant-id', {
     type: 'string',
@@ -710,7 +717,19 @@ async function main() {
         throw new Error(`Provider application config not found: ${providerAppPath}\nPlease create applications/${argv.provider}.yaml for direct provider benchmarking.`);
       }
 
-      const providerApplications = [loadApplicationConfig(providerAppPath, providerParams)];
+      const providerApp = loadApplicationConfig(providerAppPath, providerParams);
+
+      // Append optional extra query parameters (e.g. branch_id for ElevenLabs)
+      const extraQueryParams = getCompareExtraQueryParams(argv);
+      if (providerApp.url && Object.keys(extraQueryParams).length > 0) {
+        const url = new URL(providerApp.url);
+        for (const [key, value] of Object.entries(extraQueryParams)) {
+          url.searchParams.set(key, value);
+        }
+        providerApp.url = url.toString();
+      }
+
+      const providerApplications = [providerApp];
       
       const providerResults = await runBenchmark({
         applications: providerApplications,

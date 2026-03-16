@@ -1,4 +1,4 @@
-url: "https://elevenlabs.io/app/talk-to?agent_id={{assistantId}}&branch_id={{branchId}}"
+url: "https://elevenlabs.io/app/talk-to?agent_id={{assistantId}}"
 tags:
   - provider
   - elevenlabs
