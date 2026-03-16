@@ -235,7 +235,7 @@ describe('ReportGenerator - Comparison Step Alignment', () => {
     expect(allScenarioSteps.size).toBe(2);
   });
 
-  test('should generate comparison summary without errors', () => {
+  test('should generate comparison summary with single headline number', () => {
     const providerReport = new ReportGenerator('/tmp/test_provider.csv');
     const telnyxReport = new ReportGenerator('/tmp/test_telnyx.csv');
 
@@ -258,18 +258,56 @@ describe('ReportGenerator - Comparison Step Alignment', () => {
 
     console.log = originalLog;
 
-    // Should contain comparison rows with both providers having values
     const output = logs.join('\n');
-    expect(output).toContain('Response #1');
-    expect(output).toContain('Response #2');
+
+    // Should show averaged headline numbers: vapi avg = (2849+3307)/2 = 3078, telnyx avg = (1552+704)/2 = 1128
+    expect(output).toContain('3078ms');
+    expect(output).toContain('1128ms');
+    // Should show "2 matched responses"
+    expect(output).toContain('2 matched responses');
+    // Should declare Telnyx the winner
+    expect(output).toContain('🏆 Telnyx');
+    // Should NOT contain per-response breakdown without debug
+    expect(output).not.toContain('Per-response breakdown');
+    expect(output).not.toContain('#1');
+    expect(output).not.toContain('#2');
+  });
+
+  test('should show per-response breakdown with debug flag', () => {
+    const providerReport = new ReportGenerator('/tmp/test_provider.csv');
+    const telnyxReport = new ReportGenerator('/tmp/test_telnyx.csv');
+
+    providerReport.beginRun('vapi', 'appointment', 0);
+    providerReport.recordStepMetric('vapi', 'appointment', 0, 8, 'wait_for_voice', 'elapsed_time', 2849, 4);
+    providerReport.recordStepMetric('vapi', 'appointment', 0, 11, 'wait_for_voice', 'elapsed_time', 3307, 7);
+    providerReport.endRun('vapi', 'appointment', 0);
+
+    telnyxReport.beginRun('telnyx', 'appointment', 0);
+    telnyxReport.recordStepMetric('telnyx', 'appointment', 0, 6, 'wait_for_voice', 'elapsed_time', 1552, 4);
+    telnyxReport.recordStepMetric('telnyx', 'appointment', 0, 9, 'wait_for_voice', 'elapsed_time', 704, 7);
+    telnyxReport.endRun('telnyx', 'appointment', 0);
+
+    const logs = [];
+    const originalLog = console.log;
+    console.log = (msg) => logs.push(msg);
+
+    ReportGenerator.generateComparisonSummary(providerReport, telnyxReport, 'vapi', { debug: true });
+
+    console.log = originalLog;
+
+    const output = logs.join('\n');
+
+    // Should contain per-response breakdown
+    expect(output).toContain('Per-response breakdown');
+    expect(output).toContain('#1');
+    expect(output).toContain('#2');
     expect(output).toContain('2849ms');
     expect(output).toContain('1552ms');
     expect(output).toContain('3307ms');
     expect(output).toContain('704ms');
-    // Should contain delta and winner (both should show Telnyx winning)
-    expect(output).toContain('🏆 Telnyx');
-    // Should NOT contain unmatched '-ms' entries
-    expect(output).not.toContain('-ms');
+    // Should ALSO contain the headline average
+    expect(output).toContain('3078ms');
+    expect(output).toContain('1128ms');
   });
 
   test('getAggregatedMetricsByScenarioStep returns empty map when no scenario steps', () => {

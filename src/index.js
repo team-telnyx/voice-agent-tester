@@ -781,7 +781,7 @@ async function main() {
       telnyxReportGenerator.generateMetricsSummary();
 
       // Generate comparison report
-      ReportGenerator.generateComparisonSummary(providerReportGenerator, telnyxReportGenerator, argv.provider);
+      ReportGenerator.generateComparisonSummary(providerReportGenerator, telnyxReportGenerator, argv.provider, { debug: argv.debug });
 
       // Generate CSV reports if requested
       if (argv.report) {
