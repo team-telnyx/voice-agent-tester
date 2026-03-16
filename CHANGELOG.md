@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.5](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.4...v0.4.5) (2026-03-16)
+
+### Bug Fixes
+
+* add event-based fallback for audio monitoring (ElevenLabs support) ([#27](https://github.com/team-telnyx/voice-agent-tester/issues/27)) ([6051b5e](https://github.com/team-telnyx/voice-agent-tester/commit/6051b5e949376951f0fb046cffcc5a2a5c250e19))
+* align comparison metrics by scenario step index, not absolute step number ([#23](https://github.com/team-telnyx/voice-agent-tester/issues/23)) ([e4c485b](https://github.com/team-telnyx/voice-agent-tester/commit/e4c485b6eae5e9a6d60f11745b46997a183fc180)), closes [#1](https://github.com/team-telnyx/voice-agent-tester/issues/1) [#2](https://github.com/team-telnyx/voice-agent-tester/issues/2)
+* make ElevenLabs branch-id optional for comparison mode ([#24](https://github.com/team-telnyx/voice-agent-tester/issues/24)) ([3f1735a](https://github.com/team-telnyx/voice-agent-tester/commit/3f1735a6a02e6c1edc4b6e17a6be4087127bded8))
+* single headline number in comparison, per-response in --debug ([#26](https://github.com/team-telnyx/voice-agent-tester/issues/26)) ([a482129](https://github.com/team-telnyx/voice-agent-tester/commit/a482129c1bfe49d28aca7dec8230d30e5b6d8f8a)), closes [#1](https://github.com/team-telnyx/voice-agent-tester/issues/1) [#2](https://github.com/team-telnyx/voice-agent-tester/issues/2)
+
+### Documentation
+
+* restructure README with comparison mode front and center ([#25](https://github.com/team-telnyx/voice-agent-tester/issues/25)) ([f15cbcd](https://github.com/team-telnyx/voice-agent-tester/commit/f15cbcd8707cded8081d00b90accf09fd77be169))
+
 ## [0.4.4](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.3...v0.4.4) (2026-03-11)
 
 ### Features
