@@ -28,7 +28,7 @@ export class ReportGenerator {
     });
   }
 
-  recordStepMetric(appName, scenarioName, repetition, stepIndex, action, name, value) {
+  recordStepMetric(appName, scenarioName, repetition, stepIndex, action, name, value, scenarioStepIndex = null) {
     const key = this._getRunKey(appName, scenarioName, repetition);
     const run = this.runs.get(key);
 
@@ -51,6 +51,26 @@ export class ReportGenerator {
     }
     if (!this.stepColumns.get(stepIndex).has(name)) {
       this.stepColumns.get(stepIndex).set(name, `step_${stepIndex + 1}_${action}_${name}`);
+    }
+
+    // Track scenario step index for cross-provider comparison alignment
+    if (scenarioStepIndex !== null) {
+      if (!this.scenarioStepMap) {
+        this.scenarioStepMap = new Map();
+      }
+      // Map absolute stepIndex -> scenarioStepIndex (1-based)
+      this.scenarioStepMap.set(stepIndex, scenarioStepIndex);
+
+      // Track scenario-based column names for comparison display
+      if (!this.scenarioStepColumns) {
+        this.scenarioStepColumns = new Map();
+      }
+      if (!this.scenarioStepColumns.has(scenarioStepIndex)) {
+        this.scenarioStepColumns.set(scenarioStepIndex, new Map());
+      }
+      if (!this.scenarioStepColumns.get(scenarioStepIndex).has(name)) {
+        this.scenarioStepColumns.get(scenarioStepIndex).set(name, `scenario_step_${scenarioStepIndex}_${action}_${name}`);
+      }
     }
   }
 
@@ -286,7 +306,71 @@ export class ReportGenerator {
   }
 
   /**
+   * Get aggregated metrics keyed by scenario step index for cross-provider comparison.
+   * Returns a Map of scenarioStepIndex -> { metricName -> { avg, min, max, p50, columnName } }
+   */
+  getAggregatedMetricsByScenarioStep() {
+    const result = new Map();
+
+    // Build reverse map: absolute stepIndex -> scenarioStepIndex
+    const scenarioStepMap = this.scenarioStepMap || new Map();
+
+    // Collect values grouped by scenarioStepIndex
+    const grouped = new Map(); // scenarioStepIndex -> metricName -> values[]
+
+    this.allRunsData.forEach(run => {
+      run.stepMetrics.forEach((metrics, stepIndex) => {
+        const scenarioIdx = scenarioStepMap.get(stepIndex);
+        if (scenarioIdx == null) return; // skip steps without scenario mapping
+
+        if (!grouped.has(scenarioIdx)) {
+          grouped.set(scenarioIdx, new Map());
+        }
+
+        metrics.forEach((value, metricName) => {
+          if (!grouped.get(scenarioIdx).has(metricName)) {
+            grouped.get(scenarioIdx).set(metricName, []);
+          }
+          grouped.get(scenarioIdx).get(metricName).push(value);
+        });
+      });
+    });
+
+    grouped.forEach((metricMap, scenarioIdx) => {
+      const stepResult = new Map();
+
+      metricMap.forEach((values, metricName) => {
+        if (values.length > 0) {
+          const sum = values.reduce((a, b) => a + b, 0);
+          const avg = sum / values.length;
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+
+          const sortedValues = [...values].sort((a, b) => a - b);
+          let p50;
+          if (sortedValues.length % 2 === 0) {
+            p50 = (sortedValues[sortedValues.length / 2 - 1] + sortedValues[sortedValues.length / 2]) / 2;
+          } else {
+            p50 = sortedValues[Math.floor(sortedValues.length / 2)];
+          }
+
+          const columnName = this.scenarioStepColumns?.get(scenarioIdx)?.get(metricName) ||
+                            `scenario_step_${scenarioIdx}_${metricName}`;
+
+          stepResult.set(metricName, { avg, min, max, p50, columnName });
+        }
+      });
+
+      result.set(scenarioIdx, stepResult);
+    });
+
+    return result;
+  }
+
+  /**
    * Generate a comparison summary between two providers.
+   * Aligns metrics by scenario step index so that identical scenario steps
+   * are compared regardless of different application setup steps.
    * @param {ReportGenerator} providerReport - Report from the provider benchmark
    * @param {ReportGenerator} telnyxReport - Report from the Telnyx benchmark
    * @param {string} providerName - Name of the external provider
@@ -296,15 +380,16 @@ export class ReportGenerator {
     console.log('📊 COMPARISON SUMMARY: ' + providerName.toUpperCase() + ' vs TELNYX');
     console.log('='.repeat(80));
 
-    const providerMetrics = providerReport.getAggregatedMetrics();
-    const telnyxMetrics = telnyxReport.getAggregatedMetrics();
+    // Use scenario-step-aligned metrics for comparison
+    const providerMetrics = providerReport.getAggregatedMetricsByScenarioStep();
+    const telnyxMetrics = telnyxReport.getAggregatedMetricsByScenarioStep();
 
-    // Find all unique step indices from both reports
-    const allStepIndices = new Set([
+    // Find all unique scenario step indices from both reports
+    const allScenarioSteps = new Set([
       ...providerMetrics.keys(),
       ...telnyxMetrics.keys()
     ]);
-    const sortedIndices = Array.from(allStepIndices).sort((a, b) => a - b);
+    const sortedIndices = Array.from(allScenarioSteps).sort((a, b) => a - b);
 
     if (sortedIndices.length === 0) {
       console.log('No metrics available for comparison.');
@@ -315,24 +400,29 @@ export class ReportGenerator {
     console.log('\n📈 Latency Comparison (elapsed_time):');
     console.log('-'.repeat(80));
     console.log(
-      'Step'.padEnd(40) + 
+      'Metric'.padEnd(40) + 
       providerName.padEnd(12) + 
       'Telnyx'.padEnd(12) + 
-      'Delta'.padEnd(12) + 
+      'Delta'.padEnd(16) + 
       'Winner'
     );
     console.log('-'.repeat(80));
 
-    sortedIndices.forEach(stepIndex => {
-      const providerStep = providerMetrics.get(stepIndex);
-      const telnyxStep = telnyxMetrics.get(stepIndex);
+    let measurementIndex = 0;
+    sortedIndices.forEach(scenarioStep => {
+      const providerStep = providerMetrics.get(scenarioStep);
+      const telnyxStep = telnyxMetrics.get(scenarioStep);
 
       const providerElapsed = providerStep?.get('elapsed_time');
       const telnyxElapsed = telnyxStep?.get('elapsed_time');
 
       if (providerElapsed || telnyxElapsed) {
-        const columnName = providerElapsed?.columnName || telnyxElapsed?.columnName || `step_${stepIndex + 1}`;
-        const shortName = columnName.length > 38 ? columnName.substring(0, 35) + '...' : columnName;
+        measurementIndex++;
+
+        // Use a user-friendly label instead of raw step numbers
+        const action = (providerElapsed?.columnName || telnyxElapsed?.columnName || '').replace(/^scenario_step_\d+_/, '');
+        const label = `Response #${measurementIndex} (${action})`;
+        const shortLabel = label.length > 38 ? label.substring(0, 35) + '...' : label;
         
         const providerAvg = providerElapsed ? Math.round(providerElapsed.avg) : '-';
         const telnyxAvg = telnyxElapsed ? Math.round(telnyxElapsed.avg) : '-';
@@ -356,10 +446,10 @@ export class ReportGenerator {
         }
 
         console.log(
-          shortName.padEnd(40) + 
+          shortLabel.padEnd(40) + 
           `${providerAvg}ms`.padEnd(12) + 
           `${telnyxAvg}ms`.padEnd(12) + 
-          delta.padEnd(12) + 
+          delta.padEnd(16) + 
           winner
         );
       }
@@ -369,9 +459,9 @@ export class ReportGenerator {
 
     // Summary
     let providerTotal = 0, telnyxTotal = 0, comparableSteps = 0;
-    sortedIndices.forEach(stepIndex => {
-      const providerStep = providerMetrics.get(stepIndex);
-      const telnyxStep = telnyxMetrics.get(stepIndex);
+    sortedIndices.forEach(scenarioStep => {
+      const providerStep = providerMetrics.get(scenarioStep);
+      const telnyxStep = telnyxMetrics.get(scenarioStep);
       const providerElapsed = providerStep?.get('elapsed_time');
       const telnyxElapsed = telnyxStep?.get('elapsed_time');
       
@@ -387,6 +477,7 @@ export class ReportGenerator {
       const totalPct = ((totalDiff / providerTotal) * 100).toFixed(1);
       
       console.log('\n📊 Overall Summary:');
+      console.log(`   Compared ${comparableSteps} matched response latencies`);
       console.log(`   ${providerName} total latency: ${Math.round(providerTotal)}ms`);
       console.log(`   Telnyx total latency: ${Math.round(telnyxTotal)}ms`);
       console.log(`   Difference: ${totalDiff > 0 ? '+' : ''}${Math.round(totalDiff)}ms (${totalPct}%)`);
@@ -398,6 +489,8 @@ export class ReportGenerator {
       } else {
         console.log(`\n   🏆 Result: ${providerName} is faster overall`);
       }
+    } else {
+      console.log('\n⚠️  No comparable metrics found between providers.');
     }
 
     console.log('\n' + '='.repeat(80));

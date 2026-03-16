@@ -102,6 +102,17 @@ Thumbs.db
 *.swp
 *.swo
 
+# OpenClaw workspace files
+AGENTS.md
+SOUL.md
+TOOLS.md
+USER.md
+IDENTITY.md
+HEARTBEAT.md
+BOOTSTRAP.md
+MEMORY.md
+memory/
+
 # Config and data files
 *.yaml
 *.yml

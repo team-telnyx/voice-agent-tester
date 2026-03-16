@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { VoiceAgentTester } from '../src/voice-agent-tester.js';
+import { ReportGenerator } from '../src/report.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -186,5 +187,99 @@ describe('VoiceAgentTester', () => {
     // Test speak without text
     await expect(tester.executeStep({ action: 'speak' }, 0, 'scenario'))
       .rejects.toThrow('No text or file specified for speak action');
+  });
+});
+
+describe('ReportGenerator - Comparison Step Alignment', () => {
+  test('should align metrics by scenario step index across providers with different app steps', () => {
+    // Simulate: Vapi has 5 app steps, Telnyx has 3 app steps
+    // Both share the same 7 scenario steps with metrics on scenario steps 4 and 7
+    const providerReport = new ReportGenerator('/tmp/test_provider.csv');
+    const telnyxReport = new ReportGenerator('/tmp/test_telnyx.csv');
+
+    // Provider (Vapi): 5 app steps + 7 scenario steps = 12 total
+    // Metric steps at absolute indices 8 (scenario step 4) and 11 (scenario step 7)
+    providerReport.beginRun('vapi', 'appointment', 0);
+    providerReport.recordStepMetric('vapi', 'appointment', 0, 8, 'wait_for_voice', 'elapsed_time', 2849, 4);
+    providerReport.recordStepMetric('vapi', 'appointment', 0, 11, 'wait_for_voice', 'elapsed_time', 3307, 7);
+    providerReport.endRun('vapi', 'appointment', 0);
+
+    // Telnyx: 3 app steps + 7 scenario steps = 10 total
+    // Metric steps at absolute indices 6 (scenario step 4) and 9 (scenario step 7)
+    telnyxReport.beginRun('telnyx', 'appointment', 0);
+    telnyxReport.recordStepMetric('telnyx', 'appointment', 0, 6, 'wait_for_voice', 'elapsed_time', 1552, 4);
+    telnyxReport.recordStepMetric('telnyx', 'appointment', 0, 9, 'wait_for_voice', 'elapsed_time', 704, 7);
+    telnyxReport.endRun('telnyx', 'appointment', 0);
+
+    // Get scenario-aligned metrics
+    const providerMetrics = providerReport.getAggregatedMetricsByScenarioStep();
+    const telnyxMetrics = telnyxReport.getAggregatedMetricsByScenarioStep();
+
+    // Both should have metrics at scenario steps 4 and 7
+    expect(providerMetrics.has(4)).toBe(true);
+    expect(providerMetrics.has(7)).toBe(true);
+    expect(telnyxMetrics.has(4)).toBe(true);
+    expect(telnyxMetrics.has(7)).toBe(true);
+
+    // Verify values are correct
+    expect(providerMetrics.get(4).get('elapsed_time').avg).toBe(2849);
+    expect(providerMetrics.get(7).get('elapsed_time').avg).toBe(3307);
+    expect(telnyxMetrics.get(4).get('elapsed_time').avg).toBe(1552);
+    expect(telnyxMetrics.get(7).get('elapsed_time').avg).toBe(704);
+
+    // The comparison should now have 2 comparable steps (not 4 separate unmatched ones)
+    const allScenarioSteps = new Set([
+      ...providerMetrics.keys(),
+      ...telnyxMetrics.keys()
+    ]);
+    expect(allScenarioSteps.size).toBe(2);
+  });
+
+  test('should generate comparison summary without errors', () => {
+    const providerReport = new ReportGenerator('/tmp/test_provider.csv');
+    const telnyxReport = new ReportGenerator('/tmp/test_telnyx.csv');
+
+    providerReport.beginRun('vapi', 'appointment', 0);
+    providerReport.recordStepMetric('vapi', 'appointment', 0, 8, 'wait_for_voice', 'elapsed_time', 2849, 4);
+    providerReport.recordStepMetric('vapi', 'appointment', 0, 11, 'wait_for_voice', 'elapsed_time', 3307, 7);
+    providerReport.endRun('vapi', 'appointment', 0);
+
+    telnyxReport.beginRun('telnyx', 'appointment', 0);
+    telnyxReport.recordStepMetric('telnyx', 'appointment', 0, 6, 'wait_for_voice', 'elapsed_time', 1552, 4);
+    telnyxReport.recordStepMetric('telnyx', 'appointment', 0, 9, 'wait_for_voice', 'elapsed_time', 704, 7);
+    telnyxReport.endRun('telnyx', 'appointment', 0);
+
+    // Capture console output
+    const logs = [];
+    const originalLog = console.log;
+    console.log = (msg) => logs.push(msg);
+
+    ReportGenerator.generateComparisonSummary(providerReport, telnyxReport, 'vapi');
+
+    console.log = originalLog;
+
+    // Should contain comparison rows with both providers having values
+    const output = logs.join('\n');
+    expect(output).toContain('Response #1');
+    expect(output).toContain('Response #2');
+    expect(output).toContain('2849ms');
+    expect(output).toContain('1552ms');
+    expect(output).toContain('3307ms');
+    expect(output).toContain('704ms');
+    // Should contain delta and winner (both should show Telnyx winning)
+    expect(output).toContain('🏆 Telnyx');
+    // Should NOT contain unmatched '-ms' entries
+    expect(output).not.toContain('-ms');
+  });
+
+  test('getAggregatedMetricsByScenarioStep returns empty map when no scenario steps', () => {
+    const report = new ReportGenerator('/tmp/test.csv');
+    report.beginRun('test', 'scenario', 0);
+    // Record without scenarioStepIndex (app step)
+    report.recordStepMetric('test', 'scenario', 0, 0, 'click', 'elapsed_time', 100);
+    report.endRun('test', 'scenario', 0);
+
+    const metrics = report.getAggregatedMetricsByScenarioStep();
+    expect(metrics.size).toBe(0);
   });
 });

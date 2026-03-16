@@ -490,7 +490,7 @@ export class VoiceAgentTester {
     }
   }
 
-  async executeStep(step, stepIndex, appName = '', scenarioName = '', repetition = 1) {
+  async executeStep(step, stepIndex, appName = '', scenarioName = '', repetition = 1, scenarioStepIndex = null) {
     if (!this.page) {
       throw new Error('Browser not launched. Call launch() first.');
     }
@@ -553,13 +553,13 @@ export class VoiceAgentTester {
       // Record metrics for report if enabled and step has metrics attribute
       if (this.reportGenerator && step.metrics) {
         if (step.metrics.includes('elapsed_time')) {
-          this.reportGenerator.recordStepMetric(appName, scenarioName, repetition, stepIndex, step.action, 'elapsed_time', elapsedTimeMs);
+          this.reportGenerator.recordStepMetric(appName, scenarioName, repetition, stepIndex, step.action, 'elapsed_time', elapsedTimeMs, scenarioStepIndex);
         }
         // Record any additional metrics returned by the handler
         if (handlerResult && typeof handlerResult === 'object') {
           for (const [metricName, metricValue] of Object.entries(handlerResult)) {
             if (step.metrics.includes(metricName)) {
-              this.reportGenerator.recordStepMetric(appName, scenarioName, repetition, stepIndex, step.action, metricName, metricValue);
+              this.reportGenerator.recordStepMetric(appName, scenarioName, repetition, stepIndex, step.action, metricName, metricValue, scenarioStepIndex);
             }
           }
         }
@@ -1266,10 +1266,14 @@ export class VoiceAgentTester {
       }
 
       // Execute all configured steps
+      const appStepCount = appSteps.length;
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         console.log(`Executing step ${i + 1}: ${JSON.stringify(step)}`);
-        await this.executeStep(step, i, appName, scenarioName, repetition);
+        // For scenario steps (after app steps), pass the 1-based scenario step index
+        // so metrics can be aligned across providers with different app setup steps
+        const scenarioStepIndex = i >= appStepCount ? (i - appStepCount + 1) : null;
+        await this.executeStep(step, i, appName, scenarioName, repetition, scenarioStepIndex);
       }
 
       // Keep the browser open for a bit after all steps
