@@ -375,122 +375,108 @@ export class ReportGenerator {
    * @param {ReportGenerator} telnyxReport - Report from the Telnyx benchmark
    * @param {string} providerName - Name of the external provider
    */
-  static generateComparisonSummary(providerReport, telnyxReport, providerName) {
+  static generateComparisonSummary(providerReport, telnyxReport, providerName, { debug = false } = {}) {
     console.log('\n' + '='.repeat(80));
-    console.log('📊 COMPARISON SUMMARY: ' + providerName.toUpperCase() + ' vs TELNYX');
+    console.log('📊 COMPARISON: ' + providerName.toUpperCase() + ' vs TELNYX');
     console.log('='.repeat(80));
 
     // Use scenario-step-aligned metrics for comparison
     const providerMetrics = providerReport.getAggregatedMetricsByScenarioStep();
     const telnyxMetrics = telnyxReport.getAggregatedMetricsByScenarioStep();
 
-    // Find all unique scenario step indices from both reports
+    // Find matched scenario steps (present in both providers)
     const allScenarioSteps = new Set([
       ...providerMetrics.keys(),
       ...telnyxMetrics.keys()
     ]);
     const sortedIndices = Array.from(allScenarioSteps).sort((a, b) => a - b);
 
-    if (sortedIndices.length === 0) {
-      console.log('No metrics available for comparison.');
+    // Collect matched latencies
+    const providerLatencies = [];
+    const telnyxLatencies = [];
+    const perResponse = []; // for debug output
+
+    sortedIndices.forEach(scenarioStep => {
+      const providerElapsed = providerMetrics.get(scenarioStep)?.get('elapsed_time');
+      const telnyxElapsed = telnyxMetrics.get(scenarioStep)?.get('elapsed_time');
+
+      if (providerElapsed && telnyxElapsed) {
+        providerLatencies.push(providerElapsed.avg);
+        telnyxLatencies.push(telnyxElapsed.avg);
+        perResponse.push({
+          providerAvg: providerElapsed.avg,
+          telnyxAvg: telnyxElapsed.avg,
+          columnName: providerElapsed.columnName || telnyxElapsed.columnName
+        });
+      }
+    });
+
+    if (providerLatencies.length === 0) {
+      console.log('\n⚠️  No comparable metrics found between providers.');
+      console.log('='.repeat(80));
       return;
     }
 
-    // Compare elapsed_time metrics (primary latency indicator)
-    console.log('\n📈 Latency Comparison (elapsed_time):');
-    console.log('-'.repeat(80));
-    console.log(
-      'Metric'.padEnd(40) + 
-      providerName.padEnd(12) + 
-      'Telnyx'.padEnd(12) + 
-      'Delta'.padEnd(16) + 
-      'Winner'
-    );
-    console.log('-'.repeat(80));
+    // Debug: show per-response breakdown
+    if (debug && perResponse.length > 0) {
+      console.log('\n📈 Per-response breakdown:');
+      console.log('-'.repeat(80));
+      console.log(
+        'Response'.padEnd(40) +
+        providerName.padEnd(12) +
+        'Telnyx'.padEnd(12) +
+        'Delta'.padEnd(16) +
+        'Winner'
+      );
+      console.log('-'.repeat(80));
 
-    let measurementIndex = 0;
-    sortedIndices.forEach(scenarioStep => {
-      const providerStep = providerMetrics.get(scenarioStep);
-      const telnyxStep = telnyxMetrics.get(scenarioStep);
-
-      const providerElapsed = providerStep?.get('elapsed_time');
-      const telnyxElapsed = telnyxStep?.get('elapsed_time');
-
-      if (providerElapsed || telnyxElapsed) {
-        measurementIndex++;
-
-        // Use a user-friendly label instead of raw step numbers
-        const action = (providerElapsed?.columnName || telnyxElapsed?.columnName || '').replace(/^scenario_step_\d+_/, '');
-        const label = `Response #${measurementIndex} (${action})`;
+      perResponse.forEach((r, i) => {
+        const action = (r.columnName || '').replace(/^scenario_step_\d+_/, '');
+        const label = `#${i + 1} (${action})`;
         const shortLabel = label.length > 38 ? label.substring(0, 35) + '...' : label;
-        
-        const providerAvg = providerElapsed ? Math.round(providerElapsed.avg) : '-';
-        const telnyxAvg = telnyxElapsed ? Math.round(telnyxElapsed.avg) : '-';
-        
-        let delta = '-';
-        let winner = '-';
-        
-        if (providerElapsed && telnyxElapsed) {
-          const diff = telnyxElapsed.avg - providerElapsed.avg;
-          const pct = ((diff / providerElapsed.avg) * 100).toFixed(1);
-          delta = diff > 0 ? `+${Math.round(diff)}ms` : `${Math.round(diff)}ms`;
-          
-          if (Math.abs(diff) < 50) {
-            winner = '≈ Tie';
-          } else if (diff < 0) {
-            winner = '🏆 Telnyx';
-          } else {
-            winner = `🏆 ${providerName}`;
-          }
-          delta += ` (${pct}%)`;
+
+        const diff = r.telnyxAvg - r.providerAvg;
+        const pct = ((diff / r.providerAvg) * 100).toFixed(1);
+        const delta = `${diff > 0 ? '+' : ''}${Math.round(diff)}ms (${pct}%)`;
+
+        let winner;
+        if (Math.abs(diff) < 50) {
+          winner = '≈ Tie';
+        } else if (diff < 0) {
+          winner = '🏆 Telnyx';
+        } else {
+          winner = `🏆 ${providerName}`;
         }
 
         console.log(
-          shortLabel.padEnd(40) + 
-          `${providerAvg}ms`.padEnd(12) + 
-          `${telnyxAvg}ms`.padEnd(12) + 
-          delta.padEnd(16) + 
+          shortLabel.padEnd(40) +
+          `${Math.round(r.providerAvg)}ms`.padEnd(12) +
+          `${Math.round(r.telnyxAvg)}ms`.padEnd(12) +
+          delta.padEnd(16) +
           winner
         );
-      }
-    });
+      });
 
-    console.log('-'.repeat(80));
+      console.log('-'.repeat(80));
+    }
 
-    // Summary
-    let providerTotal = 0, telnyxTotal = 0, comparableSteps = 0;
-    sortedIndices.forEach(scenarioStep => {
-      const providerStep = providerMetrics.get(scenarioStep);
-      const telnyxStep = telnyxMetrics.get(scenarioStep);
-      const providerElapsed = providerStep?.get('elapsed_time');
-      const telnyxElapsed = telnyxStep?.get('elapsed_time');
-      
-      if (providerElapsed && telnyxElapsed) {
-        providerTotal += providerElapsed.avg;
-        telnyxTotal += telnyxElapsed.avg;
-        comparableSteps++;
-      }
-    });
+    // One headline number: average response latency
+    const providerAvg = providerLatencies.reduce((a, b) => a + b, 0) / providerLatencies.length;
+    const telnyxAvg = telnyxLatencies.reduce((a, b) => a + b, 0) / telnyxLatencies.length;
+    const diff = telnyxAvg - providerAvg;
+    const pct = ((diff / providerAvg) * 100).toFixed(1);
 
-    if (comparableSteps > 0) {
-      const totalDiff = telnyxTotal - providerTotal;
-      const totalPct = ((totalDiff / providerTotal) * 100).toFixed(1);
-      
-      console.log('\n📊 Overall Summary:');
-      console.log(`   Compared ${comparableSteps} matched response latencies`);
-      console.log(`   ${providerName} total latency: ${Math.round(providerTotal)}ms`);
-      console.log(`   Telnyx total latency: ${Math.round(telnyxTotal)}ms`);
-      console.log(`   Difference: ${totalDiff > 0 ? '+' : ''}${Math.round(totalDiff)}ms (${totalPct}%)`);
-      
-      if (Math.abs(totalDiff) < 100) {
-        console.log('\n   🤝 Result: Both providers perform similarly');
-      } else if (totalDiff < 0) {
-        console.log('\n   🏆 Result: Telnyx is faster overall');
-      } else {
-        console.log(`\n   🏆 Result: ${providerName} is faster overall`);
-      }
+    console.log(`\n   Average response latency (${providerLatencies.length} matched responses):\n`);
+    console.log(`   ${providerName.padEnd(16)} ${Math.round(providerAvg)}ms`);
+    console.log(`   ${'Telnyx'.padEnd(16)} ${Math.round(telnyxAvg)}ms`);
+    console.log(`   ${'Difference'.padEnd(16)} ${diff > 0 ? '+' : ''}${Math.round(diff)}ms (${pct}%)`);
+
+    if (Math.abs(diff) < 50) {
+      console.log('\n   🤝 Result: Both providers perform similarly');
+    } else if (diff < 0) {
+      console.log(`\n   🏆 Telnyx is ${Math.abs(pct)}% faster`);
     } else {
-      console.log('\n⚠️  No comparable metrics found between providers.');
+      console.log(`\n   🏆 ${providerName} is ${Math.abs(pct)}% faster`);
     }
 
     console.log('\n' + '='.repeat(80));
