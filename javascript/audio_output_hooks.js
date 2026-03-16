@@ -526,8 +526,96 @@ class AudioElementMonitor {
 
       console.log(`Started monitoring programmatic audio element: ${elementId}`);
     } catch (error) {
-      console.error(`Failed to monitor programmatic audio element ${elementId}:`, error);
+      console.error(`Failed to monitor programmatic audio element ${elementId} via analyser:`, error.message);
+      console.log(`Falling back to event-based monitoring for ${elementId}`);
+      this.monitorViaEvents(audioElement, elementId);
     }
+  }
+
+  /**
+   * Fallback monitoring using audio element events (timeupdate/playing/pause).
+   * Used when AudioContext-based monitoring fails (e.g., when the audio element
+   * is already connected to another AudioContext via MediaStreamDestination).
+   */
+  monitorViaEvents(audioElement, elementId) {
+    const monitorData = {
+      element: audioElement,
+      source: null,
+      analyser: null,
+      dataArray: null,
+      isPlaying: false,
+      lastAudioTime: 0,
+      silenceThreshold: 10,
+      checkInterval: null,
+      isProgrammatic: true,
+      eventBased: true
+    };
+
+    this.monitoredElements.set(elementId, monitorData);
+
+    // Use timeupdate to detect audio activity — fires ~4x/sec during playback
+    let lastTimeUpdate = 0;
+    let silenceTimeoutId = null;
+    const SILENCE_DELAY = 1500; // ms of no timeupdate before declaring silence
+
+    const resetSilenceTimer = () => {
+      if (silenceTimeoutId) clearTimeout(silenceTimeoutId);
+      silenceTimeoutId = setTimeout(() => {
+        if (monitorData.isPlaying) {
+          monitorData.isPlaying = false;
+          this.dispatchAudioEvent('audiostop', elementId, audioElement);
+          if (typeof window.__publishEvent === 'function') {
+            window.__publishEvent('audiostop', { elementId, timestamp: Date.now() });
+          }
+          console.log(`Audio stopped (event-based): ${elementId}`);
+        }
+      }, SILENCE_DELAY);
+    };
+
+    audioElement.addEventListener('timeupdate', () => {
+      const now = Date.now();
+      // timeupdate fires even when seeking; only count if currentTime advances
+      if (audioElement.currentTime > 0 && now - lastTimeUpdate > 50) {
+        lastTimeUpdate = now;
+        monitorData.lastAudioTime = now;
+
+        if (!monitorData.isPlaying) {
+          monitorData.isPlaying = true;
+          this.dispatchAudioEvent('audiostart', elementId, audioElement);
+          if (typeof window.__publishEvent === 'function') {
+            window.__publishEvent('audiostart', { elementId, timestamp: Date.now() });
+          }
+          console.log(`Audio started (event-based): ${elementId}`);
+        }
+        resetSilenceTimer();
+      }
+    });
+
+    audioElement.addEventListener('pause', () => {
+      if (monitorData.isPlaying) {
+        monitorData.isPlaying = false;
+        if (silenceTimeoutId) clearTimeout(silenceTimeoutId);
+        this.dispatchAudioEvent('audiostop', elementId, audioElement);
+        if (typeof window.__publishEvent === 'function') {
+          window.__publishEvent('audiostop', { elementId, timestamp: Date.now() });
+        }
+        console.log(`Audio stopped (event-based, pause): ${elementId}`);
+      }
+    });
+
+    audioElement.addEventListener('ended', () => {
+      if (monitorData.isPlaying) {
+        monitorData.isPlaying = false;
+        if (silenceTimeoutId) clearTimeout(silenceTimeoutId);
+        this.dispatchAudioEvent('audiostop', elementId, audioElement);
+        if (typeof window.__publishEvent === 'function') {
+          window.__publishEvent('audiostop', { elementId, timestamp: Date.now() });
+        }
+        console.log(`Audio stopped (event-based, ended): ${elementId}`);
+      }
+    });
+
+    console.log(`Started event-based monitoring for programmatic audio element: ${elementId}`);
   }
 
   monitorAudioElement(audioElement, elementId) {
@@ -564,7 +652,9 @@ class AudioElementMonitor {
 
       console.log(`Started monitoring audio element: ${elementId}`);
     } catch (error) {
-      console.error(`Failed to monitor audio element ${elementId}:`, error);
+      console.error(`Failed to monitor audio element ${elementId} via analyser:`, error.message);
+      console.log(`Falling back to event-based monitoring for ${elementId}`);
+      this.monitorViaEvents(audioElement, elementId);
     }
   }
 
