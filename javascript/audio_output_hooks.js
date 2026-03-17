@@ -118,6 +118,7 @@ class AudioElementMonitor {
     this.scanExistingAudioElements();
     this.setupProgrammaticAudioInterception();
     this.setupShadowDomInterception();
+    this.startPeriodicScan();
     console.log("AudioElementMonitor initialized");
   }
 
@@ -322,6 +323,42 @@ class AudioElementMonitor {
         this.handleAudioElement(audioEl);
       }
     });
+  }
+
+  /**
+   * Periodic scan for unmonitored audio elements.
+   * Catches elements that bypass interceptors (e.g., created in bundled code
+   * that captured native constructors, or appended to shadow DOMs not observed).
+   */
+  startPeriodicScan() {
+    setInterval(() => {
+      // Scan all audio elements in the main document
+      const allAudio = document.querySelectorAll('audio');
+      allAudio.forEach(audioEl => {
+        const elementId = this.getElementId(audioEl);
+        if (!this.monitoredElements.has(elementId) && (audioEl.srcObject || audioEl.src)) {
+          console.log(`Periodic scan found unmonitored audio element: ${elementId}`);
+          if (audioEl.srcObject && audioEl.srcObject instanceof MediaStream) {
+            this.monitorAudioElement(audioEl, elementId);
+          } else if (audioEl.src) {
+            this.monitorProgrammaticAudioElement(audioEl, elementId);
+          }
+        }
+      });
+
+      // Also scan programmatic Audio instances that were intercepted but never monitored
+      programmaticAudioInstances.forEach(audioEl => {
+        const elementId = this.getElementId(audioEl);
+        if (!this.monitoredElements.has(elementId) && (audioEl.srcObject || audioEl.src)) {
+          console.log(`Periodic scan found unmonitored programmatic audio: ${elementId}`);
+          if (audioEl.srcObject && audioEl.srcObject instanceof MediaStream) {
+            this.monitorAudioElement(audioEl, elementId);
+          } else if (audioEl.src) {
+            this.monitorProgrammaticAudioElement(audioEl, elementId);
+          }
+        }
+      });
+    }, 2000);
   }
 
   handleAudioElement(audioElement) {
