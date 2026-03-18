@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.6](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.5...v0.4.6) (2026-03-18)
+
+### Bug Fixes
+
+* silence detection + audio element discovery for ElevenLabs ([#29](https://github.com/team-telnyx/voice-agent-tester/issues/29)) ([789b98b](https://github.com/team-telnyx/voice-agent-tester/commit/789b98b2e91a8f0b9443110067dd17d50eaf2381))
+
 ## [0.4.5](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.4...v0.4.5) (2026-03-16)
 
 ### Bug Fixes
