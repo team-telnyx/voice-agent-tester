@@ -118,6 +118,7 @@ class AudioElementMonitor {
     this.scanExistingAudioElements();
     this.setupProgrammaticAudioInterception();
     this.setupShadowDomInterception();
+    this.startPeriodicScan();
     console.log("AudioElementMonitor initialized");
   }
 
@@ -322,6 +323,42 @@ class AudioElementMonitor {
         this.handleAudioElement(audioEl);
       }
     });
+  }
+
+  /**
+   * Periodic scan for unmonitored audio elements.
+   * Catches elements that bypass interceptors (e.g., created in bundled code
+   * that captured native constructors, or appended to shadow DOMs not observed).
+   */
+  startPeriodicScan() {
+    setInterval(() => {
+      // Scan all audio elements in the main document
+      const allAudio = document.querySelectorAll('audio');
+      allAudio.forEach(audioEl => {
+        const elementId = this.getElementId(audioEl);
+        if (!this.monitoredElements.has(elementId) && (audioEl.srcObject || audioEl.src)) {
+          console.log(`Periodic scan found unmonitored audio element: ${elementId}`);
+          if (audioEl.srcObject && audioEl.srcObject instanceof MediaStream) {
+            this.monitorAudioElement(audioEl, elementId);
+          } else if (audioEl.src) {
+            this.monitorProgrammaticAudioElement(audioEl, elementId);
+          }
+        }
+      });
+
+      // Also scan programmatic Audio instances that were intercepted but never monitored
+      programmaticAudioInstances.forEach(audioEl => {
+        const elementId = this.getElementId(audioEl);
+        if (!this.monitoredElements.has(elementId) && (audioEl.srcObject || audioEl.src)) {
+          console.log(`Periodic scan found unmonitored programmatic audio: ${elementId}`);
+          if (audioEl.srcObject && audioEl.srcObject instanceof MediaStream) {
+            this.monitorAudioElement(audioEl, elementId);
+          } else if (audioEl.src) {
+            this.monitorProgrammaticAudioElement(audioEl, elementId);
+          }
+        }
+      });
+    }, 2000);
   }
 
   handleAudioElement(audioElement) {
@@ -662,10 +699,18 @@ class AudioElementMonitor {
     const { analyser, dataArray, silenceThreshold } = monitorData;
 
     monitorData.checkInterval = setInterval(() => {
-      analyser.getByteFrequencyData(dataArray);
+      // Use time-domain data for silence detection — more robust than frequency data.
+      // Time-domain bytes center at 128 for silence; we measure RMS deviation.
+      // This avoids false positives from FFT noise floor / RTP comfort noise.
+      analyser.getByteTimeDomainData(dataArray);
 
-      const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-      const hasAudio = average > silenceThreshold;
+      let sumSquares = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        const deviation = dataArray[i] - 128;
+        sumSquares += deviation * deviation;
+      }
+      const rms = Math.sqrt(sumSquares / dataArray.length);
+      const hasAudio = rms > silenceThreshold;
 
       // if (i++ % 10 == 0) {
       //   console.log(`Average: ${average} hasAudio: ${hasAudio} elementId: ${elementId}`);
@@ -800,13 +845,16 @@ window.__getAudioDiagnostics = function() {
   audioMonitor.monitoredElements.forEach((monitorData, elementId) => {
     const { analyser, dataArray, silenceThreshold, isPlaying, lastAudioTime, isProgrammatic } = monitorData;
     
-    // Get current audio level if analyser is available
-    let currentLevel = null;
-    let currentMaxLevel = null;
+    // Get current audio level if analyser is available (RMS of time-domain deviation)
+    let currentRms = null;
     if (analyser && dataArray) {
-      analyser.getByteFrequencyData(dataArray);
-      currentLevel = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-      currentMaxLevel = Math.max(...dataArray);
+      analyser.getByteTimeDomainData(dataArray);
+      let sumSquares = 0;
+      for (let j = 0; j < dataArray.length; j++) {
+        const deviation = dataArray[j] - 128;
+        sumSquares += deviation * deviation;
+      }
+      currentRms = Math.sqrt(sumSquares / dataArray.length);
     }
 
     diagnostics.elements.push({
@@ -814,9 +862,8 @@ window.__getAudioDiagnostics = function() {
       isPlaying,
       isProgrammatic: !!isProgrammatic,
       silenceThreshold,
-      currentAudioLevel: currentLevel !== null ? currentLevel.toFixed(2) : 'unavailable',
-      currentMaxLevel: currentMaxLevel !== null ? currentMaxLevel : 'unavailable',
-      wouldTriggerAudioStart: currentLevel !== null ? currentLevel > silenceThreshold : 'unknown',
+      currentAudioLevel: currentRms !== null ? currentRms.toFixed(2) : 'unavailable',
+      wouldTriggerAudioStart: currentRms !== null ? currentRms > silenceThreshold : 'unknown',
       lastAudioTime,
       timeSinceLastAudio: lastAudioTime ? Date.now() - lastAudioTime : null
     });
