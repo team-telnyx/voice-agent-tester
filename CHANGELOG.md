@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.4.7](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.6...v0.4.7) (2026-03-19)
+
 ## [0.4.6](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.5...v0.4.6) (2026-03-18)
 
 ### Bug Fixes
