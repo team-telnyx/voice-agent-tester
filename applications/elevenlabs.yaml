@@ -9,5 +9,10 @@ steps:
     time: 3000
   - action: click
     selector: "text=Call AI agent"
+  # ElevenLabs shows a terms consent dialog — click "Agree" to proceed
+  - action: wait_for_element
+    selector: "text=Agree"
+  - action: click
+    selector: "text=Agree"
   - action: sleep
     time: 2000
