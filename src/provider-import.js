@@ -15,7 +15,7 @@ const TELNYX_IMPORT_ENDPOINT = `${TELNYX_BASE_URL}/ai/assistants/import`;
 const TELNYX_ASSISTANTS_ENDPOINT = `${TELNYX_BASE_URL}/ai/assistants`;
 
 // Supported providers
-const SUPPORTED_PROVIDERS = ['vapi', 'elevenlabs', 'retell'];
+const SUPPORTED_PROVIDERS = ['vapi'];
 
 // Default widget settings for benchmarking
 const DEFAULT_WIDGET_SETTINGS = {

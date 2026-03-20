@@ -89,7 +89,6 @@ function substituteUrlParams(url, params) {
 
 /**
  * Get the list of missing provider-specific parameters required for comparison mode.
- * Each provider has its own set of required params for the direct widget benchmark.
  *
  * @param {Object} argv - Parsed CLI arguments
  * @returns {Array<{key: string, flag: string, description: string}>} Missing params
@@ -97,21 +96,13 @@ function substituteUrlParams(url, params) {
 function getCompareRequiredParams(argv) {
   const missing = [];
 
-  switch (argv.provider) {
-    case 'vapi':
-      if (!argv.shareKey) {
-        missing.push({
-          key: 'shareKey',
-          flag: '--share-key',
-          description: 'Vapi share key',
-          hint: 'In the Vapi Dashboard, select your assistant, then click the link icon (🔗) next to the assistant ID at the top. This copies the demo link containing your share key.'
-        });
-      }
-      break;
-    case 'elevenlabs':
-      // branchId is optional — the talk-to URL works with just agent_id
-      break;
-    // retell and others: no extra params needed yet
+  if (!argv.shareKey) {
+    missing.push({
+      key: 'shareKey',
+      flag: '--share-key',
+      description: 'Vapi share key',
+      hint: 'In the Vapi Dashboard, select your assistant, then click the link icon (🔗) next to the assistant ID at the top. This copies the demo link containing your share key.'
+    });
   }
 
   return missing;
@@ -124,28 +115,7 @@ function getCompareRequiredParams(argv) {
  * @returns {Object} Template params to merge into provider params
  */
 function getCompareTemplateParams(argv) {
-  switch (argv.provider) {
-    case 'vapi':
-      return { shareKey: argv.shareKey };
-    default:
-      return {};
-  }
-}
-
-/**
- * Get provider-specific extra query parameters to append to the comparison URL.
- * Unlike template params, these are appended as-is (not substituted into {{...}} placeholders).
- *
- * @param {Object} argv - Parsed CLI arguments
- * @returns {Object} Key-value pairs to append as query parameters
- */
-function getCompareExtraQueryParams(argv) {
-  switch (argv.provider) {
-    case 'elevenlabs':
-      return argv.branchId ? { branch_id: argv.branchId } : {};
-    default:
-      return {};
-  }
+  return { shareKey: argv.shareKey };
 }
 
 // Helper function to load and validate application config
@@ -298,15 +268,11 @@ const argv = yargs(hideBin(process.argv))
   })
   .option('share-key', {
     type: 'string',
-    description: 'Vapi share key for direct widget testing (required for comparison mode with --provider vapi)'
-  })
-  .option('branch-id', {
-    type: 'string',
-    description: 'ElevenLabs branch ID for direct widget testing (optional, appended to demo URL when provided)'
+    description: 'Vapi share key for direct widget testing (required for comparison mode)'
   })
   .option('assistant-id', {
     type: 'string',
-    description: 'Assistant/agent ID for direct benchmarking (works with all providers)'
+    description: 'Telnyx assistant ID for direct benchmarking (without comparison)'
   })
   .option('debug', {
     alias: 'd',
@@ -718,17 +684,6 @@ async function main() {
       }
 
       const providerApp = loadApplicationConfig(providerAppPath, providerParams);
-
-      // Append optional extra query parameters (e.g. branch_id for ElevenLabs)
-      const extraQueryParams = getCompareExtraQueryParams(argv);
-      if (providerApp.url && Object.keys(extraQueryParams).length > 0) {
-        const url = new URL(providerApp.url);
-        for (const [key, value] of Object.entries(extraQueryParams)) {
-          url.searchParams.set(key, value);
-        }
-        providerApp.url = url.toString();
-      }
-
       const providerApplications = [providerApp];
       
       const providerResults = await runBenchmark({

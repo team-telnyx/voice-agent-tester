@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.7...v1.0.0) (2026-03-20)
+
+### ⚠ BREAKING CHANGES
+
+* The tool is now focused exclusively on **Telnyx vs Vapi** comparisons. ElevenLabs, Retell, and Livetok provider support has been removed.
+* The `--branch-id` CLI option has been removed (was ElevenLabs-specific).
+* The `--provider` flag now only accepts `vapi`.
+* Application configs for `elevenlabs.yaml` and `livetok.yaml` have been removed.
+
+### Features
+
+* Focused Telnyx vs Vapi comparison tool for v1.0.0 release ([#33](https://github.com/team-telnyx/voice-agent-tester/pull/33))
+* Streamlined CLI — fewer flags, simpler setup for Vapi-to-Telnyx benchmarking
+* Rewritten README centered on the Vapi vs Telnyx comparison workflow
+
 ## [0.4.7](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.6...v0.4.7) (2026-03-19)
 
 ## [0.4.6](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.5...v0.4.6) (2026-03-18)
