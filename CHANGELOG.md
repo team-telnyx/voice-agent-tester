@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.0.0](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.7...v2.0.0) (2026-03-26)
+
+### ⚠ BREAKING CHANGES
+
+* Remove ElevenLabs, Retell, and Livetok provider support.
+The tool is now specifically built for Telnyx vs Vapi voice agent
+benchmarking and comparison.
+
+- Remove elevenlabs.yaml and livetok.yaml application configs
+- Narrow SUPPORTED_PROVIDERS to vapi only
+- Remove --branch-id CLI option (ElevenLabs-specific)
+- Remove ElevenLabs extra query params logic
+- Simplify getCompareRequiredParams and getCompareTemplateParams
+- Rewrite README centered on the Vapi vs Telnyx comparison workflow
+- Bump version to 1.0.0
+- Update CHANGELOG with v1.0.0 breaking changes
+
+* docs: fix --no-compare description to clarify it still runs Telnyx benchmark
+
+The 'Import Only' section incorrectly stated --no-compare imports
+'without running the benchmark'. In reality it only skips the Vapi
+direct phase and comparison report — the standard benchmark still
+runs against the imported Telnyx assistant.
+
+- Rename section to 'Import + Benchmark (Skip Comparison)'
+- Add explicit note about actual behavior
+- Update CLI reference table description
+
+### Features
+
+* v1.0.0 — Focus tool on Telnyx vs Vapi comparisons ([#33](https://github.com/team-telnyx/voice-agent-tester/issues/33)) ([234f445](https://github.com/team-telnyx/voice-agent-tester/commit/234f44586f3e912d084780652544fe0862c15ab1))
+
 ## [1.0.0](https://github.com/team-telnyx/voice-agent-tester/compare/v0.4.7...v1.0.0) (2026-03-20)
 
 ### ⚠ BREAKING CHANGES
