@@ -49,9 +49,9 @@ npx @telnyx/voice-agent-tester@latest \
 | `--provider-import-id` | Vapi Dashboard → select your assistant → copy the assistant ID |
 | `--share-key` | Vapi Dashboard → select assistant → click 🔗 link icon next to the assistant ID |
 
-## Import Only (Skip Comparison)
+## Import + Benchmark (Skip Comparison)
 
-Import your Vapi assistant into Telnyx without running the benchmark:
+Import your Vapi assistant into Telnyx and benchmark the imported Telnyx assistant only (skips the Vapi direct phase):
 
 ```bash
 npx @telnyx/voice-agent-tester@latest \
@@ -63,6 +63,8 @@ npx @telnyx/voice-agent-tester@latest \
   --provider-api-key <VAPI_API_KEY> \
   --provider-import-id <VAPI_ASSISTANT_ID>
 ```
+
+> **Note:** `--no-compare` still runs the benchmark against the imported Telnyx assistant. It only skips the Vapi direct benchmark phase and the side-by-side comparison report.
 
 ## Test Telnyx Directly
 
@@ -88,7 +90,7 @@ npx @telnyx/voice-agent-tester@latest \
 | `--share-key` | | Vapi share key for comparison mode |
 | `--assistant-id` | | Telnyx assistant ID (direct mode) |
 | `--compare` | `true` | Run both Vapi + Telnyx benchmarks |
-| `--no-compare` | | Import only, skip Vapi benchmark |
+| `--no-compare` | | Skip Vapi direct benchmark and comparison (import + Telnyx benchmark only) |
 | `-d, --debug` | `false` | Detailed timeout diagnostics |
 | `-v, --verbose` | `false` | Show browser console logs |
 | `--headless` | `true` | Run browser in headless mode |
