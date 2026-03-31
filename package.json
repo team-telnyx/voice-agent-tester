@@ -26,7 +26,6 @@
     "@puppeteer/browsers": "^2.4.0",
     "express": "^5.1.0",
     "glob": "^11.1.0",
-    "openai": "^4.104.0",
     "puppeteer": "^24.3.0",
     "puppeteer-stream": "^3.0.8",
     "yaml": "^2.3.0",

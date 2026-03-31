@@ -5,7 +5,7 @@ import { glob } from 'glob';
 import puppeteer from 'puppeteer';
 import { launch as launchWithStream, getStream, wss } from 'puppeteer-stream';
 import { getInstalledBrowsers } from '@puppeteer/browsers';
-import { transcribeAudio, evaluateTranscription, pcmToWav } from './transcription.js';
+import { pcmToWav } from './transcription.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -947,16 +947,8 @@ export class VoiceAgentTester {
       const audioFilePath = await this.saveAudioAsWAV(recordingEvent.data.audioData, audioMetadata);
       console.log(`\tAudio saved as: ${audioFilePath}`);
 
-      // Process the audio with OpenAI
-      const transcription = await transcribeAudio(audioFilePath);
-      console.log(`\tTranscription: ${transcription}`);
-
-      // Evaluate the transcription against the evaluation prompt
-      const evaluationResult = await evaluateTranscription(transcription, evaluation);
-      console.log(`\tEvaluation result: ${evaluationResult.score} "${evaluationResult.explanation}"`);
-
       return {
-        score: evaluationResult.score,
+        audioFilePath,
       }
     } catch (error) {
       console.error('Error in listen command:', error.message);

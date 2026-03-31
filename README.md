@@ -141,7 +141,7 @@ steps:
 | `fill` | Set an input field value directly |
 | `select` | Select dropdown/checkbox/radio option |
 | `screenshot` | Capture a screenshot |
-| `listen` | Record agent audio, transcribe, and evaluate |
+| `listen` | Record agent audio and save as WAV |
 
 ## Background Noise Testing
 
